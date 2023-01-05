@@ -1,0 +1,10 @@
+name: lc
+channels:
+  - conda-forge
+dependencies:
+  - cmake
+  - llvmdev=15.0.6
+  - clangdev=15.0.6
+  - make
+  - zlib
+  - git
