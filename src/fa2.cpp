@@ -24,14 +24,16 @@ public:
   explicit FindNamedClassVisitor(clang::ASTContext *Context)
     : Context(Context) {}
 
-  bool VisitCXXRecordDecl(clang::CXXRecordDecl *Declaration) {
-    if (Declaration->getQualifiedNameAsString() == "n::m::C") {
-      clang::FullSourceLoc FullLocation = Context->getFullLoc(Declaration->getBeginLoc());
-      if (FullLocation.isValid())
+  bool VisitVarDecl(clang::VarDecl *x) {
+    clang::FullSourceLoc FullLocation = Context->getFullLoc(x->getBeginLoc());
+    if (FullLocation.isValid()) {
         llvm::outs() << "Found declaration at "
-                     << FullLocation.getSpellingLineNumber() << ":"
-                     << FullLocation.getSpellingColumnNumber() << "\n";
+                        << FullLocation.getSpellingLineNumber() << ":"
+                        << FullLocation.getSpellingColumnNumber() << "\n";
+    } else {
+        llvm::outs() << "Invalid location";
     }
+    x->dump();
     return true;
   }
 
@@ -69,5 +71,5 @@ int main(int argc, const char **argv) {
   clang::tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();
   clang::tooling::ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());
-  return Tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
+  return Tool.run(clang::tooling::newFrontendActionFactory<FindNamedClassAction>().get());
 }
