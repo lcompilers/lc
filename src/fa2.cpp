@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -26,13 +28,20 @@ public:
 
   bool VisitVarDecl(clang::VarDecl *x) {
     clang::FullSourceLoc FullLocation = Context->getFullLoc(x->getBeginLoc());
-    if (FullLocation.isValid()) {
-        llvm::outs() << "Found declaration at "
-                        << FullLocation.getSpellingLineNumber() << ":"
-                        << FullLocation.getSpellingColumnNumber() << "\n";
-    } else {
-        llvm::outs() << "Invalid location";
-    }
+    assert(FullLocation.isValid());
+    llvm::outs() << "VarDecl: "
+                    << FullLocation.getSpellingLineNumber() << ":"
+                    << FullLocation.getSpellingColumnNumber() << "\n";
+    x->dump();
+    return true;
+  }
+
+  bool VisitBinaryOperator(clang::BinaryOperator *x) {
+    clang::FullSourceLoc FullLocation = Context->getFullLoc(x->getBeginLoc());
+    assert(FullLocation.isValid());
+    llvm::outs() << "BinaryOperator: "
+                    << FullLocation.getSpellingLineNumber() << ":"
+                    << FullLocation.getSpellingColumnNumber() << "\n";
     x->dump();
     return true;
   }
@@ -62,14 +71,17 @@ public:
 };
 
 int main(int argc, const char **argv) {
-  auto ExpectedParser =
-      clang::tooling::CommonOptionsParser::create(argc, argv, MyToolCategory);
-  if (!ExpectedParser) {
-    llvm::errs() << ExpectedParser.takeError();
-    return 1;
-  }
-  clang::tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();
-  clang::tooling::ClangTool Tool(OptionsParser.getCompilations(),
-                 OptionsParser.getSourcePathList());
-  return Tool.run(clang::tooling::newFrontendActionFactory<FindNamedClassAction>().get());
+    auto ExpectedParser =
+        clang::tooling::CommonOptionsParser::create(argc, argv, MyToolCategory);
+    if (!ExpectedParser) {
+        llvm::errs() << ExpectedParser.takeError();
+        return 1;
+    }
+    clang::tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();
+    clang::tooling::ClangTool Tool(OptionsParser.getCompilations(),
+                    OptionsParser.getSourcePathList());
+
+    std::cout << "Start" << std::endl;
+    std::cout << std::endl;
+    return Tool.run(clang::tooling::newFrontendActionFactory<FindNamedClassAction>().get());
 }
