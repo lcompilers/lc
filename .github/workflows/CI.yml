@@ -44,3 +44,4 @@ jobs:
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
             ./src/lc --ast-dump examples/test.cpp
+            ./src/fa "namespace n { namespace m { class C {}; } }"
