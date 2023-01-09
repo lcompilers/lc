@@ -3,3 +3,5 @@ target_link_libraries(lc p::clang p::llvm)
 
 add_executable(fa fa.cpp)
 target_link_libraries(fa p::clang p::llvm)
+set_source_files_properties(fa.cpp
+    PROPERTIES COMPILE_FLAGS "-fvisibility=hidden")
