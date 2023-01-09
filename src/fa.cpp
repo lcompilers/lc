@@ -4,17 +4,15 @@
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Tooling/Tooling.h>
 
-using namespace clang;
-
 class FindNamedClassVisitor
-  : public RecursiveASTVisitor<FindNamedClassVisitor> {
+  : public clang::RecursiveASTVisitor<FindNamedClassVisitor> {
 public:
-  explicit FindNamedClassVisitor(ASTContext *Context)
+  explicit FindNamedClassVisitor(clang::ASTContext *Context)
     : Context(Context) {}
 
-  bool VisitCXXRecordDecl(CXXRecordDecl *Declaration) {
+  bool VisitCXXRecordDecl(clang::CXXRecordDecl *Declaration) {
     if (Declaration->getQualifiedNameAsString() == "n::m::C") {
-      FullSourceLoc FullLocation = Context->getFullLoc(Declaration->getBeginLoc());
+      clang::FullSourceLoc FullLocation = Context->getFullLoc(Declaration->getBeginLoc());
       if (FullLocation.isValid())
         llvm::outs() << "Found declaration at "
                      << FullLocation.getSpellingLineNumber() << ":"
@@ -24,12 +22,12 @@ public:
   }
 
 private:
-  ASTContext *Context;
+  clang::ASTContext *Context;
 };
 
 class FindNamedClassConsumer : public clang::ASTConsumer {
 public:
-  explicit FindNamedClassConsumer(ASTContext *Context)
+  explicit FindNamedClassConsumer(clang::ASTContext *Context)
     : Visitor(Context) {}
 
   virtual void HandleTranslationUnit(clang::ASTContext &Context) {
