@@ -1,3 +1,6 @@
+// This example is from
+// https://clang.llvm.org/docs/RAVFrontendAction.html
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
