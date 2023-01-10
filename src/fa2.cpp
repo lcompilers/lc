@@ -31,7 +31,21 @@ public:
   explicit FindNamedClassVisitor(clang::ASTContext *Context)
     : Context(Context) {}
 
+  bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    x->dump();
+    std::cout << "(TranslationUnitDecl " << first << ":" << last << " ";
+    for (auto D = x->decls_begin(), DEnd = x->decls_end(); D != DEnd; ++D) {
+        TraverseDecl(*D);
+    }
+    std::cout << ")";
+    return true;
+  }
+
   bool TraverseVarDecl(clang::VarDecl *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
     std::cout << "(VarDecl ";
     clang::Expr *init = x->getInit();
     if (init) {
@@ -39,19 +53,14 @@ public:
     } else {
         std::cout << "()";
     }
+    std::cout << " " << first << ":" << last;
     std::cout << ")";
-    clang::FullSourceLoc FullLocation = Context->getFullLoc(x->getBeginLoc());
-    assert(FullLocation.isValid());
-    /*
-    llvm::outs() << "VarDecl: "
-                    << FullLocation.getSpellingLineNumber() << ":"
-                    << FullLocation.getSpellingColumnNumber() << "\n";
-    */
-    //x->dump();
     return true;
   }
 
   bool TraverseBinaryOperator(clang::BinaryOperator *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
     std::cout << "(BinaryOperator ";
     clang::BinaryOperatorKind op = x->getOpcode();
     switch (op) {
@@ -68,11 +77,13 @@ public:
     TraverseStmt(x->getLHS());
     std::cout << " ";
     TraverseStmt(x->getRHS());
-    std::cout << ")";
+    std::cout << " " << first << ":" << last << ")";
     return true;
   }
 
   bool TraverseDeclRefExpr(clang::DeclRefExpr *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
     clang::Decl *d = x->getDecl();
     std::string kind = d->getDeclKindName();
     std::string name; 
@@ -85,14 +96,20 @@ public:
         clang::PrintingPolicy PrintPolicy = Context->getPrintingPolicy();
         type = clang::QualType::getAsString(T_split, PrintPolicy);
     }
-    std::cout << "(DeclRefExpr " << kind << " " << name << " " << type << ")";
+    std::cout << "(DeclRefExpr " << kind << " " << name << " " << type;
+    std::cout << " " << first << ":" << last;
+    std::cout << ")";
     return true;
   }
 
   bool TraverseIntegerLiteral(clang::IntegerLiteral *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
     llvm::APInt v = x->getValue();
     uint64_t i = v.getLimitedValue();
-    std::cout << "(IntegerLiteral " << i << ")";
+    std::cout << "(IntegerLiteral " << i;
+    std::cout << " " << first << ":" << last;
+    std::cout << ")";
     return true;
   }
 
