@@ -20,6 +20,11 @@ static llvm::cl::extrahelp CommonHelp(clang::tooling::CommonOptionsParser::HelpM
 // A help message for this specific tool can be added afterwards.
 static llvm::cl::extrahelp MoreHelp("\nMore help text...\n");
 
+// The easiest source of documentation is to read these two source files:
+//
+// https://github.com/llvm/llvm-project/blob/1b9ba5856add7d557a5c1100f9e3033ba54e7efe/clang/include/clang/AST/TextNodeDumper.h
+// https://github.com/llvm/llvm-project/blob/1b9ba5856add7d557a5c1100f9e3033ba54e7efe/clang/lib/AST/TextNodeDumper.cpp
+
 class FindNamedClassVisitor
   : public clang::RecursiveASTVisitor<FindNamedClassVisitor> {
 public:
@@ -64,7 +69,23 @@ public:
     std::cout << " ";
     TraverseStmt(x->getRHS());
     std::cout << ")";
-    x->dump();
+    return true;
+  }
+
+  bool TraverseDeclRefExpr(clang::DeclRefExpr *x) {
+    clang::Decl *d = x->getDecl();
+    std::string kind = d->getDeclKindName();
+    std::string name; 
+    std::string type; 
+    if (clang::NamedDecl *nd = clang::dyn_cast<clang::NamedDecl>(d)) {
+        name = nd->getName();
+    }
+    if (clang::ValueDecl *vd = clang::dyn_cast<clang::ValueDecl>(d)) {
+        clang::SplitQualType T_split = vd->getType().split();
+        clang::PrintingPolicy PrintPolicy = Context->getPrintingPolicy();
+        type = clang::QualType::getAsString(T_split, PrintPolicy);
+    }
+    std::cout << "(DeclRefExpr " << kind << " " << name << " " << type << ")";
     return true;
   }
 
