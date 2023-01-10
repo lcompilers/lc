@@ -137,6 +137,7 @@ public:
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
     std::cout << "(ReturnStmt ";
     std::cout << first << ":" << last << " ";
+    TraverseStmt(x->getRetValue());
     std::cout << ")";
     return true;
   }
