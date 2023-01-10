@@ -46,28 +46,41 @@ public:
   bool TraverseFunctionDecl(clang::FunctionDecl *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
-    clang::Decl *d = x;
-    std::string name; 
-    std::string type; 
-    if (clang::NamedDecl *nd = clang::dyn_cast<clang::NamedDecl>(d)) {
-        name = nd->getName();
-    }
-    if (clang::ValueDecl *vd = clang::dyn_cast<clang::ValueDecl>(d)) {
-        clang::SplitQualType T_split = vd->getType().split();
-        clang::PrintingPolicy PrintPolicy = Context->getPrintingPolicy();
-        type = clang::QualType::getAsString(T_split, PrintPolicy);
-    }
+    std::string name = x->getName().str();
+    std::string type = clang::QualType::getAsString(x->getType().split(),
+        Context->getPrintingPolicy());
     std::cout << "(FunctionDecl " << first << ":" << last << " ";
     std::cout << name << " \"" << type << "\" [";
+    for (auto &p : x->parameters()) {
+        TraverseDecl(p);
+        std::cout << " ";
+    }
+    std::cout << "] [";
     TraverseStmt(x->getBody());
     std::cout << "])";
+    return true;
+  }
+
+  bool TraverseCompoundStmt(clang::CompoundStmt *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::cout << "(CompoundStmt " << first << ":" << last << " ";
+    for (auto &s : x->body()) {
+        TraverseStmt(s);
+        std::cout << " ";
+    }
+    std::cout << ")";
     return true;
   }
 
   bool TraverseVarDecl(clang::VarDecl *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::string name = x->getName().str();
+    std::string type = clang::QualType::getAsString(x->getType().split(),
+        Context->getPrintingPolicy());
     std::cout << "(VarDecl " << first << ":" << last << " ";
+    std::cout << name << " " << type << " ";
     clang::Expr *init = x->getInit();
     if (init) {
         TraverseStmt(init);
@@ -78,16 +91,58 @@ public:
     return true;
   }
 
+  bool TraverseParmVarDecl(clang::ParmVarDecl *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::string name = x->getName().str();
+    std::string type = clang::QualType::getAsString(x->getType().split(),
+        Context->getPrintingPolicy());
+    std::cout << "(ParmVarDecl " << first << ":" << last << " ";
+    std::cout << name << " " << type << " ";
+    clang::Expr *init = x->getDefaultArg();
+    if (init) {
+        TraverseStmt(init);
+    } else {
+        std::cout << "()";
+    }
+    std::cout << ")";
+    return true;
+  }
+
+  bool TraverseImplicitCastExpr(clang::ImplicitCastExpr *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::string name = x->getCastKindName();
+    std::string type = clang::QualType::getAsString(x->getType().split(),
+        Context->getPrintingPolicy());
+    std::cout << "(ImplicitCastExpr " << first << ":" << last << " ";
+    std::cout << name << " " << type << " ";
+    TraverseStmt(x->getSubExpr());
+    std::cout << ")";
+    return true;
+  }
+
+  bool TraverseParenExpr(clang::ParenExpr *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::cout << "(ParenExpr " << first << ":" << last << " ";
+    TraverseStmt(x->getSubExpr());
+    std::cout << ")";
+    return true;
+  }
+
   bool TraverseBinaryOperator(clang::BinaryOperator *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
     std::cout << "(BinaryOperator " << first << ":" << last << " ";
     clang::BinaryOperatorKind op = x->getOpcode();
     switch (op) {
-        case clang::BO_Div: {
-            std::cout << "/";
-            break;
-        }
+        case clang::BO_Add: { std::cout << "+"; break; }
+        case clang::BO_Sub: { std::cout << "-"; break; }
+        case clang::BO_Mul: { std::cout << "*"; break; }
+        case clang::BO_Div: { std::cout << "/"; break; }
+        case clang::BO_EQ: { std::cout << "=="; break; }
+        case clang::BO_Assign: { std::cout << "="; break; }
         default : {
             throw std::runtime_error("BinaryOperator kind not supported");
             break;
@@ -104,18 +159,10 @@ public:
   bool TraverseDeclRefExpr(clang::DeclRefExpr *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
-    clang::Decl *d = x->getDecl();
-    std::string kind = d->getDeclKindName();
-    std::string name; 
-    std::string type; 
-    if (clang::NamedDecl *nd = clang::dyn_cast<clang::NamedDecl>(d)) {
-        name = nd->getName();
-    }
-    if (clang::ValueDecl *vd = clang::dyn_cast<clang::ValueDecl>(d)) {
-        clang::SplitQualType T_split = vd->getType().split();
-        clang::PrintingPolicy PrintPolicy = Context->getPrintingPolicy();
-        type = clang::QualType::getAsString(T_split, PrintPolicy);
-    }
+    std::string kind = x->getDecl()->getDeclKindName();
+    std::string name = clang::dyn_cast<clang::NamedDecl>(x->getDecl())->getName().str();
+    std::string type = clang::QualType::getAsString(x->getType().split(),
+        Context->getPrintingPolicy());
     std::cout << "(DeclRefExpr " << first << ":" << last << " ";
     std::cout << kind << " " << name << " " << type;
     std::cout << ")";
@@ -125,8 +172,7 @@ public:
   bool TraverseIntegerLiteral(clang::IntegerLiteral *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
-    llvm::APInt v = x->getValue();
-    uint64_t i = v.getLimitedValue();
+    uint64_t i = x->getValue().getLimitedValue();
     std::cout << "(IntegerLiteral ";
     std::cout << first << ":" << last << " " << i << ")";
     return true;
