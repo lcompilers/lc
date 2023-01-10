@@ -46,3 +46,4 @@ jobs:
             ./src/lc --ast-dump examples/test.cpp
             ./src/fa "namespace n { namespace m { class C {}; } }"
             ./src/fa2 examples/test.cpp
+            ./src/fa2 --extra-arg=-Isrc/runtime/include examples/expr2.c
