@@ -110,6 +110,15 @@ public:
     return true;
   }
 
+  bool TraverseParenExpr(clang::ParenExpr *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::cout << "(ParenExpr " << first << ":" << last << " ";
+    TraverseStmt(x->getSubExpr());
+    std::cout << ")";
+    return true;
+  }
+
   bool TraverseBinaryOperator(clang::BinaryOperator *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
