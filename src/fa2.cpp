@@ -97,6 +97,18 @@ public:
     return true;
   }
 
+  bool TraverseImplicitCastExpr(clang::ImplicitCastExpr *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::string name = x->getCastKindName();
+    std::string type = clang::QualType::getAsString(x->getType().split(),
+        Context->getPrintingPolicy());
+    std::cout << "(ImplicitCastExpr " << first << ":" << last << " ";
+    std::cout << name << " " << type << " ";
+    TraverseStmt(x->getSubExpr());
+    std::cout << ")";
+    return true;
+  }
 
   bool TraverseBinaryOperator(clang::BinaryOperator *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
