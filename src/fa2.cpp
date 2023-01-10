@@ -132,6 +132,15 @@ public:
     return true;
   }
 
+  bool TraverseReturnStmt(clang::ReturnStmt *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::cout << "(ReturnStmt ";
+    std::cout << first << ":" << last << " ";
+    std::cout << ")";
+    return true;
+  }
+
 private:
   clang::ASTContext *Context;
 };
