@@ -51,6 +51,11 @@ public:
         Context->getPrintingPolicy());
     std::cout << "(FunctionDecl " << first << ":" << last << " ";
     std::cout << name << " \"" << type << "\" [";
+    for (auto &p : x->parameters()) {
+        TraverseDecl(p);
+        std::cout << " ";
+    }
+    std::cout << "] [";
     TraverseStmt(x->getBody());
     std::cout << "])";
     return true;
@@ -81,10 +86,12 @@ public:
     std::string type = clang::QualType::getAsString(x->getType().split(),
         Context->getPrintingPolicy());
     std::cout << "(ParmVarDecl " << first << ":" << last << " ";
-    std::cout << name << " " << type;
+    std::cout << name << " " << type << " ";
     clang::Expr *init = x->getDefaultArg();
     if (init) {
         TraverseStmt(init);
+    } else {
+        std::cout << "()";
     }
     std::cout << ")";
     return true;
