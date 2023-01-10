@@ -43,6 +43,27 @@ public:
     return true;
   }
 
+  bool TraverseFunctionDecl(clang::FunctionDecl *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    clang::Decl *d = x;
+    std::string name; 
+    std::string type; 
+    if (clang::NamedDecl *nd = clang::dyn_cast<clang::NamedDecl>(d)) {
+        name = nd->getName();
+    }
+    if (clang::ValueDecl *vd = clang::dyn_cast<clang::ValueDecl>(d)) {
+        clang::SplitQualType T_split = vd->getType().split();
+        clang::PrintingPolicy PrintPolicy = Context->getPrintingPolicy();
+        type = clang::QualType::getAsString(T_split, PrintPolicy);
+    }
+    std::cout << "(FunctionDecl " << first << ":" << last << " ";
+    std::cout << name << " \"" << type << "\" ";
+    TraverseStmt(x->getBody());
+    std::cout << ")";
+    return true;
+  }
+
   bool TraverseVarDecl(clang::VarDecl *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
