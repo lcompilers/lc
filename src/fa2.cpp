@@ -206,6 +206,15 @@ public:
     return true;
   }
 
+  bool TraverseStringLiteral(clang::StringLiteral *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::string s = x->getString().str();
+    std::cout << "(StringLiteral ";
+    std::cout << first << ":" << last << " '" << s << "')";
+    return true;
+  }
+
   bool TraverseReturnStmt(clang::ReturnStmt *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
