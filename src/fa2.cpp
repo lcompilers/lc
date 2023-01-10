@@ -61,6 +61,18 @@ public:
     return true;
   }
 
+  bool TraverseCompoundStmt(clang::CompoundStmt *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::cout << "(CompoundStmt " << first << ":" << last << " ";
+    for (auto &s : x->body()) {
+        TraverseStmt(s);
+        std::cout << " ";
+    }
+    std::cout << ")";
+    return true;
+  }
+
   bool TraverseVarDecl(clang::VarDecl *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
