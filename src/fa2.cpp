@@ -26,23 +26,52 @@ public:
   explicit FindNamedClassVisitor(clang::ASTContext *Context)
     : Context(Context) {}
 
-  bool VisitVarDecl(clang::VarDecl *x) {
+  bool TraverseVarDecl(clang::VarDecl *x) {
+    std::cout << "(VarDecl ";
+    clang::Expr *init = x->getInit();
+    if (init) {
+        TraverseStmt(init);
+    } else {
+        std::cout << "()";
+    }
+    std::cout << ")";
     clang::FullSourceLoc FullLocation = Context->getFullLoc(x->getBeginLoc());
     assert(FullLocation.isValid());
+    /*
     llvm::outs() << "VarDecl: "
                     << FullLocation.getSpellingLineNumber() << ":"
                     << FullLocation.getSpellingColumnNumber() << "\n";
+    */
+    //x->dump();
+    return true;
+  }
+
+  bool TraverseBinaryOperator(clang::BinaryOperator *x) {
+    std::cout << "(BinaryOperator ";
+    clang::BinaryOperatorKind op = x->getOpcode();
+    switch (op) {
+        case clang::BO_Div: {
+            std::cout << "/";
+            break;
+        }
+        default : {
+            throw std::runtime_error("BinaryOperator kind not supported");
+            break;
+        }
+    }
+    std::cout << " ";
+    TraverseStmt(x->getLHS());
+    std::cout << " ";
+    TraverseStmt(x->getRHS());
+    std::cout << ")";
     x->dump();
     return true;
   }
 
-  bool VisitBinaryOperator(clang::BinaryOperator *x) {
-    clang::FullSourceLoc FullLocation = Context->getFullLoc(x->getBeginLoc());
-    assert(FullLocation.isValid());
-    llvm::outs() << "BinaryOperator: "
-                    << FullLocation.getSpellingLineNumber() << ":"
-                    << FullLocation.getSpellingColumnNumber() << "\n";
-    x->dump();
+  bool TraverseIntegerLiteral(clang::IntegerLiteral *x) {
+    llvm::APInt v = x->getValue();
+    uint64_t i = v.getLimitedValue();
+    std::cout << "(IntegerLiteral " << i << ")";
     return true;
   }
 
