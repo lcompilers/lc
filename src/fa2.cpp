@@ -74,16 +74,35 @@ public:
     return true;
   }
 
+  bool TraverseParmVarDecl(clang::ParmVarDecl *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::string name = x->getName().str();
+    std::string type = clang::QualType::getAsString(x->getType().split(),
+        Context->getPrintingPolicy());
+    std::cout << "(ParmVarDecl " << first << ":" << last << " ";
+    std::cout << name << " " << type;
+    clang::Expr *init = x->getDefaultArg();
+    if (init) {
+        TraverseStmt(init);
+    }
+    std::cout << ")";
+    return true;
+  }
+
+
   bool TraverseBinaryOperator(clang::BinaryOperator *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
     std::cout << "(BinaryOperator " << first << ":" << last << " ";
     clang::BinaryOperatorKind op = x->getOpcode();
     switch (op) {
-        case clang::BO_Div: {
-            std::cout << "/";
-            break;
-        }
+        case clang::BO_Add: { std::cout << "+"; break; }
+        case clang::BO_Sub: { std::cout << "-"; break; }
+        case clang::BO_Mul: { std::cout << "*"; break; }
+        case clang::BO_Div: { std::cout << "/"; break; }
+        case clang::BO_EQ: { std::cout << "=="; break; }
+        case clang::BO_Assign: { std::cout << "="; break; }
         default : {
             throw std::runtime_error("BinaryOperator kind not supported");
             break;
