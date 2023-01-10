@@ -46,14 +46,13 @@ public:
   bool TraverseVarDecl(clang::VarDecl *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
-    std::cout << "(VarDecl ";
+    std::cout << "(VarDecl " << first << ":" << last << " ";
     clang::Expr *init = x->getInit();
     if (init) {
         TraverseStmt(init);
     } else {
         std::cout << "()";
     }
-    std::cout << " " << first << ":" << last;
     std::cout << ")";
     return true;
   }
@@ -61,7 +60,7 @@ public:
   bool TraverseBinaryOperator(clang::BinaryOperator *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
-    std::cout << "(BinaryOperator ";
+    std::cout << "(BinaryOperator " << first << ":" << last << " ";
     clang::BinaryOperatorKind op = x->getOpcode();
     switch (op) {
         case clang::BO_Div: {
@@ -77,7 +76,7 @@ public:
     TraverseStmt(x->getLHS());
     std::cout << " ";
     TraverseStmt(x->getRHS());
-    std::cout << " " << first << ":" << last << ")";
+    std::cout << ")";
     return true;
   }
 
@@ -96,8 +95,8 @@ public:
         clang::PrintingPolicy PrintPolicy = Context->getPrintingPolicy();
         type = clang::QualType::getAsString(T_split, PrintPolicy);
     }
-    std::cout << "(DeclRefExpr " << kind << " " << name << " " << type;
-    std::cout << " " << first << ":" << last;
+    std::cout << "(DeclRefExpr " << first << ":" << last << " ";
+    std::cout << kind << " " << name << " " << type;
     std::cout << ")";
     return true;
   }
@@ -107,9 +106,8 @@ public:
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
     llvm::APInt v = x->getValue();
     uint64_t i = v.getLimitedValue();
-    std::cout << "(IntegerLiteral " << i;
-    std::cout << " " << first << ":" << last;
-    std::cout << ")";
+    std::cout << "(IntegerLiteral ";
+    std::cout << first << ":" << last << " " << i << ")";
     return true;
   }
 
