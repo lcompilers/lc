@@ -156,6 +156,34 @@ public:
     return true;
   }
 
+  bool TraverseCallExpr(clang::CallExpr *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::cout << "(CallExpr " << first << ":" << last << " ";
+    std::cout << " ";
+    TraverseStmt(x->getCallee());
+    std::cout << " [";
+    for (auto *p : x->arguments()) {
+        TraverseStmt(p);
+        std::cout << " ";
+    }
+    std::cout << "])";
+    return true;
+  }
+
+  bool TraverseDeclStmt(clang::DeclStmt *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::cout << "(DeclStmt " << first << ":" << last << " ";
+    if (x->isSingleDecl()) {
+        TraverseDecl(x->getSingleDecl());
+    } else {
+        throw std::runtime_error("DeclGroup not supported");
+    }
+    std::cout << ")";
+    return true;
+  }
+
   bool TraverseDeclRefExpr(clang::DeclRefExpr *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
@@ -175,6 +203,15 @@ public:
     uint64_t i = x->getValue().getLimitedValue();
     std::cout << "(IntegerLiteral ";
     std::cout << first << ":" << last << " " << i << ")";
+    return true;
+  }
+
+  bool TraverseStringLiteral(clang::StringLiteral *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::string s = x->getString().str();
+    std::cout << "(StringLiteral ";
+    std::cout << first << ":" << last << " '" << s << "')";
     return true;
   }
 
