@@ -58,9 +58,9 @@ public:
         type = clang::QualType::getAsString(T_split, PrintPolicy);
     }
     std::cout << "(FunctionDecl " << first << ":" << last << " ";
-    std::cout << name << " \"" << type << "\" ";
+    std::cout << name << " \"" << type << "\" [";
     TraverseStmt(x->getBody());
-    std::cout << ")";
+    std::cout << "])";
     return true;
   }
 
