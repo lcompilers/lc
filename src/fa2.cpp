@@ -156,6 +156,19 @@ public:
     return true;
   }
 
+  bool TraverseDeclStmt(clang::DeclStmt *x) {
+    uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+    uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+    std::cout << "(DeclStmt " << first << ":" << last << " ";
+    if (x->isSingleDecl()) {
+        TraverseDecl(x->getSingleDecl());
+    } else {
+        throw std::runtime_error("DeclGroup not supported");
+    }
+    std::cout << ")";
+    return true;
+  }
+
   bool TraverseDeclRefExpr(clang::DeclRefExpr *x) {
     uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
     uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
