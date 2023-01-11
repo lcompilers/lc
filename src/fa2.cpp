@@ -225,6 +225,17 @@ public:
     return true;
   }
 
+  bool TraverseTypedefDecl(clang::TypedefDecl *x) {
+      uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+      uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+      std::string name = x->getName().str();
+      std::string type = x->getUnderlyingType().getAsString();
+      std::cout << "(TypedefDecl " << first << ":" << last << " ";
+      std::cout << name << " " << type << ")";
+      return true;
+  }
+
+
 private:
   clang::ASTContext *Context;
 };
