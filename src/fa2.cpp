@@ -43,12 +43,13 @@ public:
 
     bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
         x->dump();
-        std::string tmp = "(TranslationUnitDecl " + loc(x) + " ";
+        std::string tmp = "(TranslationUnitDecl " + loc(x) + " [";
         for (auto D = x->decls_begin(), DEnd = x->decls_end(); D != DEnd; ++D) {
+            ast = "";
             TraverseDecl(*D);
-            tmp += ast + " ";
+            if (ast != "") tmp += ast;
         }
-        tmp += ")";
+        tmp += "])";
         ast = tmp;
         return true;
     }
@@ -72,12 +73,12 @@ public:
     }
 
     bool TraverseCompoundStmt(clang::CompoundStmt *x) {
-        std::string tmp = "(CompoundStmt " + loc(x) + " ";
+        std::string tmp = "(CompoundStmt " + loc(x) + " [";
         for (auto &s : x->body()) {
             TraverseStmt(s);
             tmp += ast + " ";
         }
-        tmp += ")";
+        tmp += "])";
         ast = tmp;
         return true;
     }
@@ -253,6 +254,31 @@ public:
         ast = tmp;
         return true;
     }
+
+    bool TraverseBuiltinType(clang::BuiltinType *x) {
+        std::string type = x->getName(Context->getPrintingPolicy()).str();
+        std::string tmp = "(BuiltinType " + type + ")";
+        ast = tmp;
+        return true;
+    }
+
+    bool TraversePointerType(clang::PointerType *x) {
+        /*
+        std::string type = clang::QualType::getAsString(x->getPointeeType(), Context->getPrintingPolicy());
+        */
+        std::string tmp = "(PointerType )" /*+ type + ")"*/;
+        ast = tmp;
+        return true;
+    }
+
+    bool TraverseRecordType(clang::RecordType *x) {
+        clang::RecordDecl *decl = x->getDecl();
+        TraverseRecordDecl(decl);
+        std::string tmp = "(RecordType " + ast + ")";
+        ast = tmp;
+        return true;
+    }
+
 
 private:
     clang::ASTContext *Context;
