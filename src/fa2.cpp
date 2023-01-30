@@ -8,6 +8,10 @@
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 
+#include <libasr/alloc.h>
+#include <libasr/asr_scopes.h>
+#include <libasr/asr.h>
+
 // Apply a custom category to all command-line options so that they are the
 // only ones displayed.
 static llvm::cl::OptionCategory MyToolCategory("my-tool options");
@@ -42,6 +46,13 @@ public:
     }
 
     bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
+        Allocator al(4*1024);
+        LFortran::SymbolTable *current_scope = al.make_new<LFortran::SymbolTable>(nullptr);
+        LFortran::Location l;
+        l.first = 1; l.last = 1;
+        LFortran::ASR::asr_t *tu = LFortran::ASR::make_TranslationUnit_t(al, l,
+            current_scope, nullptr, 0);
+
         x->dump();
         std::string tmp = "(TranslationUnitDecl " + loc(x) + " [";
         for (auto D = x->decls_begin(), DEnd = x->decls_end(); D != DEnd; ++D) {
