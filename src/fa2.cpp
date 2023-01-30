@@ -11,6 +11,7 @@
 #include <libasr/alloc.h>
 #include <libasr/asr_scopes.h>
 #include <libasr/asr.h>
+#include <libasr/string_utils.h>
 
 // Apply a custom category to all command-line options so that they are the
 // only ones displayed.
@@ -34,9 +35,11 @@ class FindNamedClassVisitor
     : public clang::RecursiveASTVisitor<FindNamedClassVisitor> {
 public:
     std::string ast;
+    LFortran::SymbolTable *current_scope=nullptr;
+    Allocator al;
 
     explicit FindNamedClassVisitor(clang::ASTContext *Context)
-        : Context(Context) {}
+        : Context(Context), al{4*1024} {}
 
     template <typename T>
     std::string loc(T *x) {
@@ -46,8 +49,8 @@ public:
     }
 
     bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
-        Allocator al(4*1024);
-        LFortran::SymbolTable *current_scope = al.make_new<LFortran::SymbolTable>(nullptr);
+        LFortran::SymbolTable *parent_scope = al.make_new<LFortran::SymbolTable>(nullptr);
+        current_scope = parent_scope;
         LFortran::Location l;
         l.first = 1; l.last = 1;
         LFortran::ASR::asr_t *tu = LFortran::ASR::make_TranslationUnit_t(al, l,
@@ -98,6 +101,21 @@ public:
         std::string name = x->getName().str();
         std::string type = clang::QualType::getAsString(
             x->getType().split(), Context->getPrintingPolicy());
+
+        LFortran::Location l;
+        l.first = 1; l.last = 1;
+
+        LFortran::ASR::intentType intent = LFortran::ASR::intentType::Local;
+        LFortran::ASR::abiType current_procedure_abi_type = LFortran::ASR::abiType::Source;
+        LFortran::ASR::ttype_t *asr_type = LFortran::ASR::down_cast<LFortran::ASR::ttype_t>(LFortran::ASR::make_Integer_t(al, l, 4, nullptr, 0));
+        LFortran::ASR::symbol_t *v = LFortran::ASR::down_cast<LFortran::ASR::symbol_t>(LFortran::ASR::make_Variable_t(al, l,                                          
+            current_scope, LFortran::s2c(al, name), nullptr,
+            0, intent, nullptr, nullptr,
+            LFortran::ASR::storage_typeType::Default, asr_type,
+            current_procedure_abi_type, LFortran::ASR::Public,
+            LFortran::ASR::presenceType::Required, false));
+        current_scope->add_symbol(name, v);
+
         std::string tmp = "(VarDecl " + loc(x) + " ";
         tmp += name + " " + type + " ";
         clang::Expr *init = x->getInit();
