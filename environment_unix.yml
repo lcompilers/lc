@@ -8,3 +8,4 @@ dependencies:
   - make
   - zlib
   - git
+  - python=3.11.0
