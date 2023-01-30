@@ -125,3 +125,4 @@ message("WITH_TARGET_WASM: ${WITH_TARGET_WASM}")
 
 
 add_subdirectory(src)
+add_subdirectory(libasr/src/libasr)
