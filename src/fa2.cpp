@@ -8,6 +8,76 @@
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 
+#include <libasr/alloc.h>
+#include <libasr/asr_scopes.h>
+#include <libasr/asr.h>
+#include <libasr/string_utils.h>
+#include <libasr/asr_utils.h>
+
+namespace LFortran {
+
+class ASRPickleVisitor :
+    public ASR::PickleBaseVisitor<ASRPickleVisitor>
+{
+public:
+    bool show_intrinsic_modules;
+
+    std::string get_str() {
+        return s;
+    }
+    void visit_symbol(const ASR::symbol_t &x) {
+        s.append(ASRUtils::symbol_parent_symtab(&x)->get_counter());
+        s.append(" ");
+        if (use_colors) {
+            s.append(color(fg::yellow));
+        }
+        s.append(ASRUtils::symbol_name(&x));
+        if (use_colors) {
+            s.append(color(fg::reset));
+        }
+    }
+    void visit_IntegerConstant(const ASR::IntegerConstant_t &x) {
+        s.append("(");
+        if (use_colors) {
+            s.append(color(style::bold));
+            s.append(color(fg::magenta));
+        }
+        s.append("IntegerConstant");
+        if (use_colors) {
+            s.append(color(fg::reset));
+            s.append(color(style::reset));
+        }
+        s.append(" ");
+        if (use_colors) {
+            s.append(color(fg::cyan));
+        }
+        s.append(std::to_string(x.m_n));
+        if (use_colors) {
+            s.append(color(fg::reset));
+        }
+        s.append(" ");
+        this->visit_ttype(*x.m_type);
+        s.append(")");
+    }
+};
+
+std::string pickle(ASR::asr_t &asr, bool colors, bool indent,
+        bool show_intrinsic_modules) {
+    ASRPickleVisitor v;
+    v.use_colors = colors;
+    v.indent = indent;
+    v.show_intrinsic_modules = show_intrinsic_modules;
+    v.visit_asr(asr);
+    return v.get_str();
+}
+
+std::string pickle(ASR::TranslationUnit_t &asr, bool colors, bool indent, bool show_intrinsic_modules) {
+    return pickle((ASR::asr_t &)asr, colors, indent, show_intrinsic_modules);
+}
+
+
+}
+
 // Apply a custom category to all command-line options so that they are the
 // only ones displayed.
 static llvm::cl::OptionCategory MyToolCategory("my-tool options");
@@ -30,9 +100,11 @@ class FindNamedClassVisitor
     : public clang::RecursiveASTVisitor<FindNamedClassVisitor> {
 public:
     std::string ast;
+    LFortran::SymbolTable *current_scope=nullptr;
+    Allocator al;
 
     explicit FindNamedClassVisitor(clang::ASTContext *Context)
-        : Context(Context) {}
+        : Context(Context), al{4*1024} {}
 
     template <typename T>
     std::string loc(T *x) {
@@ -42,6 +114,13 @@ public:
     }
 
     bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
+        LFortran::SymbolTable *parent_scope = al.make_new<LFortran::SymbolTable>(nullptr);
+        current_scope = parent_scope;
+        LFortran::Location l;
+        l.first = 1; l.last = 1;
+        LFortran::ASR::asr_t *tu = LFortran::ASR::make_TranslationUnit_t(al, l,
+            current_scope, nullptr, 0);
+
         x->dump();
         std::string tmp = "(TranslationUnitDecl " + loc(x) + " [";
         for (auto D = x->decls_begin(), DEnd = x->decls_end(); D != DEnd; ++D) {
@@ -51,6 +130,8 @@ public:
         }
         tmp += "])";
         ast = tmp;
+
+        std::cout << LFortran::pickle(*tu, true, true, true) << std::endl;
         return true;
     }
 
@@ -87,6 +168,21 @@ public:
         std::string name = x->getName().str();
         std::string type = clang::QualType::getAsString(
             x->getType().split(), Context->getPrintingPolicy());
+
+        LFortran::Location l;
+        l.first = 1; l.last = 1;
+
+        LFortran::ASR::intentType intent = LFortran::ASR::intentType::Local;
+        LFortran::ASR::abiType current_procedure_abi_type = LFortran::ASR::abiType::Source;
+        LFortran::ASR::ttype_t *asr_type = LFortran::ASR::down_cast<LFortran::ASR::ttype_t>(LFortran::ASR::make_Integer_t(al, l, 4, nullptr, 0));
+        LFortran::ASR::symbol_t *v = LFortran::ASR::down_cast<LFortran::ASR::symbol_t>(LFortran::ASR::make_Variable_t(al, l,                                          
+            current_scope, LFortran::s2c(al, name), nullptr,
+            0, intent, nullptr, nullptr,
+            LFortran::ASR::storage_typeType::Default, asr_type,
+            current_procedure_abi_type, LFortran::ASR::Public,
+            LFortran::ASR::presenceType::Required, false));
+        current_scope->add_symbol(name, v);
+
         std::string tmp = "(VarDecl " + loc(x) + " ";
         tmp += name + " " + type + " ";
         clang::Expr *init = x->getInit();
