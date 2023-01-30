@@ -12,6 +12,71 @@
 #include <libasr/asr_scopes.h>
 #include <libasr/asr.h>
 #include <libasr/string_utils.h>
+#include <libasr/asr_utils.h>
+
+namespace LFortran {
+
+class ASRPickleVisitor :
+    public ASR::PickleBaseVisitor<ASRPickleVisitor>
+{
+public:
+    bool show_intrinsic_modules;
+
+    std::string get_str() {
+        return s;
+    }
+    void visit_symbol(const ASR::symbol_t &x) {
+        s.append(ASRUtils::symbol_parent_symtab(&x)->get_counter());
+        s.append(" ");
+        if (use_colors) {
+            s.append(color(fg::yellow));
+        }
+        s.append(ASRUtils::symbol_name(&x));
+        if (use_colors) {
+            s.append(color(fg::reset));
+        }
+    }
+    void visit_IntegerConstant(const ASR::IntegerConstant_t &x) {
+        s.append("(");
+        if (use_colors) {
+            s.append(color(style::bold));
+            s.append(color(fg::magenta));
+        }
+        s.append("IntegerConstant");
+        if (use_colors) {
+            s.append(color(fg::reset));
+            s.append(color(style::reset));
+        }
+        s.append(" ");
+        if (use_colors) {
+            s.append(color(fg::cyan));
+        }
+        s.append(std::to_string(x.m_n));
+        if (use_colors) {
+            s.append(color(fg::reset));
+        }
+        s.append(" ");
+        this->visit_ttype(*x.m_type);
+        s.append(")");
+    }
+};
+
+std::string pickle(ASR::asr_t &asr, bool colors, bool indent,
+        bool show_intrinsic_modules) {
+    ASRPickleVisitor v;
+    v.use_colors = colors;
+    v.indent = indent;
+    v.show_intrinsic_modules = show_intrinsic_modules;
+    v.visit_asr(asr);
+    return v.get_str();
+}
+
+std::string pickle(ASR::TranslationUnit_t &asr, bool colors, bool indent, bool show_intrinsic_modules) {
+    return pickle((ASR::asr_t &)asr, colors, indent, show_intrinsic_modules);
+}
+
+
+}
 
 // Apply a custom category to all command-line options so that they are the
 // only ones displayed.
@@ -65,6 +130,8 @@ public:
         }
         tmp += "])";
         ast = tmp;
+
+        std::cout << LFortran::pickle(*tu, true, true, true) << std::endl;
         return true;
     }
 
