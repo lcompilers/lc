@@ -96,11 +96,13 @@ static llvm::cl::extrahelp MoreHelp("\nMore help text...\n");
 // https://github.com/llvm/llvm-project/blob/1b9ba5856add7d557a5c1100f9e3033ba54e7efe/clang/include/clang/AST/TextNodeDumper.h
 // https://github.com/llvm/llvm-project/blob/1b9ba5856add7d557a5c1100f9e3033ba54e7efe/clang/lib/AST/TextNodeDumper.cpp
 
+namespace LFortran {
+
 class FindNamedClassVisitor
     : public clang::RecursiveASTVisitor<FindNamedClassVisitor> {
 public:
     std::string ast;
-    LFortran::SymbolTable *current_scope=nullptr;
+    SymbolTable *current_scope=nullptr;
     Allocator al;
 
     explicit FindNamedClassVisitor(clang::ASTContext *Context)
@@ -114,11 +116,11 @@ public:
     }
 
     bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
-        LFortran::SymbolTable *parent_scope = al.make_new<LFortran::SymbolTable>(nullptr);
+        SymbolTable *parent_scope = al.make_new<SymbolTable>(nullptr);
         current_scope = parent_scope;
-        LFortran::Location l;
+        Location l;
         l.first = 1; l.last = 1;
-        LFortran::ASR::asr_t *tu = LFortran::ASR::make_TranslationUnit_t(al, l,
+        ASR::asr_t *tu = ASR::make_TranslationUnit_t(al, l,
             current_scope, nullptr, 0);
 
         x->dump();
@@ -131,7 +133,7 @@ public:
         tmp += "])";
         ast = tmp;
 
-        std::cout << LFortran::pickle(*tu, true, true, true) << std::endl;
+        std::cout << pickle(*tu, true, true, true) << std::endl;
         return true;
     }
 
@@ -169,13 +171,13 @@ public:
         std::string type = clang::QualType::getAsString(
             x->getType().split(), Context->getPrintingPolicy());
 
-        LFortran::Location l;
+        Location l;
         l.first = 1; l.last = 1;
 
-        LFortran::ASR::intentType intent = LFortran::ASR::intentType::Local;
-        LFortran::ASR::abiType current_procedure_abi_type = LFortran::ASR::abiType::Source;
-        LFortran::ASR::ttype_t *asr_type = LFortran::ASR::down_cast<LFortran::ASR::ttype_t>(LFortran::ASR::make_Integer_t(al, l, 4, nullptr, 0));
-        LFortran::ASR::symbol_t *v = LFortran::ASR::down_cast<LFortran::ASR::symbol_t>(LFortran::ASR::make_Variable_t(al, l,                                          
+        ASR::intentType intent = ASR::intentType::Local;
+        ASR::abiType current_procedure_abi_type = ASR::abiType::Source;
+        ASR::ttype_t *asr_type = ASR::down_cast<ASR::ttype_t>(ASR::make_Integer_t(al, l, 4, nullptr, 0));
+        ASR::symbol_t *v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, l,                                          
             current_scope, LFortran::s2c(al, name), nullptr,
             0, intent, nullptr, nullptr,
             LFortran::ASR::storage_typeType::Default, asr_type,
@@ -380,6 +382,8 @@ private:
     clang::ASTContext *Context;
 };
 
+}
+
 class FindNamedClassConsumer : public clang::ASTConsumer {
 public:
     explicit FindNamedClassConsumer(clang::ASTContext *Context)
@@ -391,7 +395,7 @@ public:
     }
 
 private:
-    FindNamedClassVisitor Visitor;
+    LFortran::FindNamedClassVisitor Visitor;
 };
 
 class FindNamedClassAction : public clang::ASTFrontendAction {
