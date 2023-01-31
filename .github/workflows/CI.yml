@@ -44,7 +44,7 @@ jobs:
         shell: bash -l {0}
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
-            ./src/lc --ast-dump examples/test.cpp
-            ./src/fa "namespace n { namespace m { class C {}; } }"
-            ./src/fa2 examples/test.cpp
-            ./src/fa2 --extra-arg=-Isrc/runtime/include examples/expr2.c
+            ./build/src/lc --ast-dump examples/test.cpp
+            ./build/src/fa "namespace n { namespace m { class C {}; } }"
+            ./build/src/fa2 examples/test.cpp
+            ./build/src/fa2 --extra-arg=-Isrc/runtime/include examples/expr2.c
