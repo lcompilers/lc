@@ -4,6 +4,7 @@ set -ex
 
 python libasr/src/libasr/asdl_cpp.py libasr/src/libasr/ASR.asdl libasr/src/libasr/asr.h
 python libasr/src/libasr/wasm_instructions_visitor.py
+rm -rf libasr/src/libasr/__pycache__/
 
 rm -rf build
 mkdir build
