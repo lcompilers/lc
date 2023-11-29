@@ -1,0 +1,29 @@
+## CMake
+CMakeCache.txt
+CMakeFiles/
+Makefile
+CTestTestfile.cmake
+cmake_install.cmake
+install_manifest.txt
+Testing/Temporary
+CPackConfig.cmake
+CPackSourceConfig.cmake
+_CPack_Packages
+/CMakeSettings.json
+src/libasr/libasr.a.*
+
+## libraries
+*.a
+*.so
+*.s
+*.ll
+*.dylib
+*.dSYM
+
+## Generated files
+build/libasr/src/libasr/asr.h
+build/libasr/src/libasr/wasm_visitor.h
+build/libasr/src/libasr/config.h
+fa
+fa2
+lc
