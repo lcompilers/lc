@@ -1,3 +1,8 @@
+#ifndef CLANG_AST_TO_ASR_H
+#define CLANG_AST_TO_ASR_H
+
+#define WITH_LFORTRAN_ASSERT
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -6,43 +11,46 @@
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 
-#include <libasr/alloc.h>
-#include <libasr/asr_scopes.h>
-#include <libasr/asr.h>
-#include <libasr/string_utils.h>
-#include <libasr/asr_utils.h>
+#include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
+#include "clang/Driver/Options.h"
+#include "clang/Frontend/ASTConsumers.h"
+#include "clang/Rewrite/Frontend/FixItRewriter.h"
+#include "clang/Rewrite/Frontend/FrontendActions.h"
+#include "clang/StaticAnalyzer/Frontend/FrontendActions.h"
+#include "clang/Tooling/CommonOptionsParser.h"
+#include "clang/Tooling/Syntax/BuildTree.h"
+#include "clang/Tooling/Syntax/TokenBufferTokenManager.h"
+#include "clang/Tooling/Syntax/Tokens.h"
+#include "clang/Tooling/Syntax/Tree.h"
+#include "clang/Tooling/Tooling.h"
+
 #include <libasr/pickle.h>
 
 #include <iostream>
 
-// Apply a custom category to all command-line options so that they are the
-// only ones displayed.
-static llvm::cl::OptionCategory MyToolCategory("my-tool options");
-
-// CommonOptionsParser declares HelpMessage with a description of the common
-// command-line options related to the compilation database and input files.
-// It's nice to have this help message in all tools.
-static llvm::cl::extrahelp
-    CommonHelp(clang::tooling::CommonOptionsParser::HelpMessage);
-
-// A help message for this specific tool can be added afterwards.
-static llvm::cl::extrahelp MoreHelp("\nMore help text...\n");
-
-// The easiest source of documentation is to read these two source files:
-//
-// https://github.com/llvm/llvm-project/blob/1b9ba5856add7d557a5c1100f9e3033ba54e7efe/clang/include/clang/AST/TextNodeDumper.h
-// https://github.com/llvm/llvm-project/blob/1b9ba5856add7d557a5c1100f9e3033ba54e7efe/clang/lib/AST/TextNodeDumper.cpp
-
 namespace LCompilers {
 
-class FindNamedClassVisitor: public clang::RecursiveASTVisitor<FindNamedClassVisitor> {
+class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
+
 public:
+
     std::string ast;
     SymbolTable *current_scope=nullptr;
-    Allocator al;
+    Allocator& al;
+    ASR::asr_t*& tu;
+    ASR::asr_t* tmp;
 
-    explicit FindNamedClassVisitor(clang::ASTContext *Context)
-        : Context(Context), al{4*1024} {}
+    explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
+        Allocator& al_, ASR::asr_t*& tu_):
+        Context(Context_), al{al_}, tu{tu_}, tmp{nullptr} {}
+
+    template <typename T>
+    Location Lloc(T *x) {
+        Location l;
+        l.first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
+        l.last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
+        return l;
+    }
 
     template <typename T>
     std::string loc(T *x) {
@@ -54,40 +62,61 @@ public:
     bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
         SymbolTable *parent_scope = al.make_new<SymbolTable>(nullptr);
         current_scope = parent_scope;
-        Location l;
-        l.first = 1; l.last = 1;
-        ASR::asr_t *tu = ASR::make_TranslationUnit_t(al, l,
-            current_scope, nullptr, 0);
+        Location l = Lloc(x);
+        tu = ASR::make_TranslationUnit_t(al, l, current_scope, nullptr, 0);
 
-        x->dump();
-        std::string tmp = "(TranslationUnitDecl " + loc(x) + " [";
         for (auto D = x->decls_begin(), DEnd = x->decls_end(); D != DEnd; ++D) {
-            ast = "";
             TraverseDecl(*D);
-            if (ast != "") tmp += ast;
         }
-        tmp += "])";
-        ast = tmp;
 
-        std::cout << LCompilers::pickle(*tu, true, true, true) << std::endl;
+        // std::cout << LCompilers::pickle(*tu, true, true, true) << std::endl;
+
         return true;
     }
 
+    ASR::ttype_t* ClangTypeToASRType(const clang::QualType& qual_type) {
+        const clang::SplitQualType& split_qual_type = qual_type.split();
+        const clang::Type* clang_type = split_qual_type.asPair().first;
+        Location l; l.first = 1, l.last = 1;
+        if( clang_type->isIntegerType() ) {
+            return ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
+        } else {
+            LCOMPILERS_ASSERT(false);
+        }
+        return nullptr;
+    }
+
     bool TraverseFunctionDecl(clang::FunctionDecl *x) {
+        SymbolTable* parent_scope = current_scope;
+        current_scope = al.make_new<SymbolTable>(parent_scope);
         std::string name = x->getName().str();
+        // const clang::QualType& qual_type = x->getType();
         std::string type = clang::QualType::getAsString(
             x->getType().split(), Context->getPrintingPolicy());
-        std::string tmp = "(FunctionDecl " + loc(x) + " ";
-        tmp += name + " \"" + type + "\" [";
+        Vec<ASR::expr_t*> args;
+        args.reserve(al, 1);
         for (auto &p : x->parameters()) {
             TraverseDecl(p);
-            tmp += ast + " ";
+            ASR::symbol_t* arg_sym = ASR::down_cast<ASR::symbol_t>(tmp);
+            args.push_back(al,
+                ASRUtils::EXPR(ASR::make_Var_t(al, arg_sym->base.loc, arg_sym)));
         }
-        tmp += "] ";
-        TraverseStmt(x->getBody());
-        tmp += ast;
-        tmp += ")";
-        ast = tmp;
+        if( x->hasBody() ) {
+            TraverseStmt(x->getBody());
+        }
+        ASR::ttype_t* return_type = ClangTypeToASRType(x->getReturnType());
+        ASR::symbol_t* return_sym = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
+            current_scope, s2c(al, "__return_var"), nullptr, 0, ASR::intentType::Local, nullptr, nullptr,
+            ASR::storage_typeType::Default, return_type, nullptr, ASR::abiType::Source, ASR::accessType::Public,
+            ASR::presenceType::Required, false));
+        current_scope->add_symbol("__return_var", return_sym);
+        ASR::expr_t* return_var = ASRUtils::EXPR(ASR::make_Var_t(al, return_sym->base.loc, return_sym));
+        tmp = ASRUtils::make_Function_t_util(al, Lloc(x), current_scope, s2c(al, name), nullptr, 0,
+            args.p, args.size(), nullptr, 0, return_var, ASR::abiType::Source, ASR::accessType::Public,
+            ASR::deftypeType::Implementation, nullptr, false, false, false, false, false, nullptr, 0,
+            false, false, false);
+        parent_scope->add_symbol(name, ASR::down_cast<ASR::symbol_t>(tmp));
+        current_scope = parent_scope;
         return true;
     }
 
@@ -117,7 +146,7 @@ public:
             current_scope, s2c(al, name), nullptr,
             0, intent, nullptr, nullptr,
             ASR::storage_typeType::Default, asr_type, nullptr,
-            current_procedure_abi_type, ASR::Public,
+            current_procedure_abi_type, ASR::accessType::Public,
             ASR::presenceType::Required, false));
         current_scope->add_symbol(name, v);
 
@@ -313,49 +342,44 @@ public:
         return true;
     }
 
+
 private:
     clang::ASTContext *Context;
 };
 
-}
+class FindNamedClassConsumer: public clang::ASTConsumer {
 
-class FindNamedClassConsumer : public clang::ASTConsumer {
 public:
-    explicit FindNamedClassConsumer(clang::ASTContext *Context)
-        : Visitor(Context) {}
+
+    explicit FindNamedClassConsumer(clang::ASTContext *Context,
+        Allocator& al_, ASR::asr_t*& tu_): Visitor(Context, al_, tu_) {}
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         Visitor.TraverseDecl(Context.getTranslationUnitDecl());
-        std::cout << Visitor.ast << std::endl;
     }
 
 private:
-    LCompilers::FindNamedClassVisitor Visitor;
+    LCompilers::ClangASTtoASRVisitor Visitor;
 };
 
-class FindNamedClassAction : public clang::ASTFrontendAction {
-public:
-    virtual std::unique_ptr<clang::ASTConsumer>
-    CreateASTConsumer(clang::CompilerInstance &Compiler,
-                      llvm::StringRef InFile) {
-        return std::make_unique<FindNamedClassConsumer>(
-            &Compiler.getASTContext());
-    }
+class FindNamedClassAction: public clang::ASTFrontendAction {
+
+    public:
+
+        Allocator& al;
+        ASR::asr_t*& tu;
+
+        FindNamedClassAction(Allocator& al_, ASR::asr_t*& tu_): al{al_}, tu{tu_} {
+
+        }
+
+        virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(
+            clang::CompilerInstance &Compiler, llvm::StringRef /*InFile*/) {
+            return std::make_unique<FindNamedClassConsumer>(
+                &Compiler.getASTContext(), al, tu);
+        }
 };
 
-int main(int argc, const char **argv) {
-    auto ExpectedParser = clang::tooling::CommonOptionsParser::create(
-        argc, argv, MyToolCategory);
-    if (!ExpectedParser) {
-        llvm::errs() << ExpectedParser.takeError();
-        return 1;
-    }
-    clang::tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();
-    clang::tooling::ClangTool Tool(OptionsParser.getCompilations(),
-                                   OptionsParser.getSourcePathList());
-
-    std::cout << "Start" << std::endl;
-    std::cout << std::endl;
-    return Tool.run(
-        clang::tooling::newFrontendActionFactory<FindNamedClassAction>().get());
 }
+
+#endif
