@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -13,70 +11,9 @@
 #include <libasr/asr.h>
 #include <libasr/string_utils.h>
 #include <libasr/asr_utils.h>
+#include <libasr/pickle.h>
 
-namespace LFortran {
-
-class ASRPickleVisitor :
-    public ASR::PickleBaseVisitor<ASRPickleVisitor>
-{
-public:
-    bool show_intrinsic_modules;
-
-    std::string get_str() {
-        return s;
-    }
-    void visit_symbol(const ASR::symbol_t &x) {
-        s.append(ASRUtils::symbol_parent_symtab(&x)->get_counter());
-        s.append(" ");
-        if (use_colors) {
-            s.append(color(fg::yellow));
-        }
-        s.append(ASRUtils::symbol_name(&x));
-        if (use_colors) {
-            s.append(color(fg::reset));
-        }
-    }
-    void visit_IntegerConstant(const ASR::IntegerConstant_t &x) {
-        s.append("(");
-        if (use_colors) {
-            s.append(color(style::bold));
-            s.append(color(fg::magenta));
-        }
-        s.append("IntegerConstant");
-        if (use_colors) {
-            s.append(color(fg::reset));
-            s.append(color(style::reset));
-        }
-        s.append(" ");
-        if (use_colors) {
-            s.append(color(fg::cyan));
-        }
-        s.append(std::to_string(x.m_n));
-        if (use_colors) {
-            s.append(color(fg::reset));
-        }
-        s.append(" ");
-        this->visit_ttype(*x.m_type);
-        s.append(")");
-    }
-};
-
-std::string pickle(ASR::asr_t &asr, bool colors, bool indent,
-        bool show_intrinsic_modules) {
-    ASRPickleVisitor v;
-    v.use_colors = colors;
-    v.indent = indent;
-    v.show_intrinsic_modules = show_intrinsic_modules;
-    v.visit_asr(asr);
-    return v.get_str();
-}
-
-std::string pickle(ASR::TranslationUnit_t &asr, bool colors, bool indent, bool show_intrinsic_modules) {
-    return pickle((ASR::asr_t &)asr, colors, indent, show_intrinsic_modules);
-}
-
-
-}
+#include <iostream>
 
 // Apply a custom category to all command-line options so that they are the
 // only ones displayed.
@@ -96,10 +33,9 @@ static llvm::cl::extrahelp MoreHelp("\nMore help text...\n");
 // https://github.com/llvm/llvm-project/blob/1b9ba5856add7d557a5c1100f9e3033ba54e7efe/clang/include/clang/AST/TextNodeDumper.h
 // https://github.com/llvm/llvm-project/blob/1b9ba5856add7d557a5c1100f9e3033ba54e7efe/clang/lib/AST/TextNodeDumper.cpp
 
-namespace LFortran {
+namespace LCompilers {
 
-class FindNamedClassVisitor
-    : public clang::RecursiveASTVisitor<FindNamedClassVisitor> {
+class FindNamedClassVisitor: public clang::RecursiveASTVisitor<FindNamedClassVisitor> {
 public:
     std::string ast;
     SymbolTable *current_scope=nullptr;
@@ -133,7 +69,7 @@ public:
         tmp += "])";
         ast = tmp;
 
-        std::cout << pickle(*tu, true, true, true) << std::endl;
+        std::cout << LCompilers::pickle(*tu, true, true, true) << std::endl;
         return true;
     }
 
@@ -176,13 +112,13 @@ public:
 
         ASR::intentType intent = ASR::intentType::Local;
         ASR::abiType current_procedure_abi_type = ASR::abiType::Source;
-        ASR::ttype_t *asr_type = ASR::down_cast<ASR::ttype_t>(ASR::make_Integer_t(al, l, 4, nullptr, 0));
-        ASR::symbol_t *v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, l,                                          
-            current_scope, LFortran::s2c(al, name), nullptr,
+        ASR::ttype_t *asr_type = ASR::down_cast<ASR::ttype_t>(ASR::make_Integer_t(al, l, 4));
+        ASR::symbol_t *v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, l,
+            current_scope, s2c(al, name), nullptr,
             0, intent, nullptr, nullptr,
-            LFortran::ASR::storage_typeType::Default, asr_type,
-            current_procedure_abi_type, LFortran::ASR::Public,
-            LFortran::ASR::presenceType::Required, false));
+            ASR::storage_typeType::Default, asr_type, nullptr,
+            current_procedure_abi_type, ASR::Public,
+            ASR::presenceType::Required, false));
         current_scope->add_symbol(name, v);
 
         std::string tmp = "(VarDecl " + loc(x) + " ";
@@ -377,7 +313,6 @@ public:
         return true;
     }
 
-
 private:
     clang::ASTContext *Context;
 };
@@ -395,7 +330,7 @@ public:
     }
 
 private:
-    LFortran::FindNamedClassVisitor Visitor;
+    LCompilers::FindNamedClassVisitor Visitor;
 };
 
 class FindNamedClassAction : public clang::ASTFrontendAction {
