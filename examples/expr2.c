@@ -1,4 +1,4 @@
-int printf(const char *, ...);
+#include <stdio.h>
 
 int main() {
     int x;
