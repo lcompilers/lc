@@ -38,6 +38,8 @@ static cl::opt<std::string> ASTDumpFilter("ast-dump-filter",
 // LC options
 static cl::opt<bool>
     ASRDump("asr-dump", cl::desc("dump the ASR"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    NoIndent("no-indent", cl::desc("do not indent output"), cl::cat(ClangCheckCategory));
 
 class ClangCheckActionFactory {
 
@@ -105,7 +107,11 @@ int main(int argc, const char **argv) {
         FrontendActionFactory* FrontendFactory;
         FrontendFactory = LCompilers::newFrontendActionLCompilersFactory<LCompilers::FindNamedClassAction>(al, tu);
         status = Tool.run(FrontendFactory);
-        std::cout<< LCompilers::pickle(*tu, true, true, true) << std::endl;
+        bool indent = true;
+        if( NoIndent ) {
+            indent = false;
+        }
+        std::cout<< LCompilers::pickle(*tu, true, indent, true) << std::endl;
     } else {
         status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
     }
