@@ -73,21 +73,81 @@ public:
             TraverseDecl(*D);
         }
 
-        // std::cout << LCompilers::pickle(*tu, true, true, true) << std::endl;
-
         return true;
     }
 
     ASR::ttype_t* ClangTypeToASRType(const clang::QualType& qual_type) {
         const clang::SplitQualType& split_qual_type = qual_type.split();
         const clang::Type* clang_type = split_qual_type.asPair().first;
+        const clang::Qualifiers qualifiers = split_qual_type.asPair().second;
         Location l; l.first = 1, l.last = 1;
-        if( clang_type->isIntegerType() ) {
-            return ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
+        ASR::ttype_t* type = nullptr;
+        if( clang_type->isCharType() ) {
+            type = ASRUtils::TYPE(ASR::make_Character_t(al, l, 1, -1, nullptr));
+        } else if( clang_type->isIntegerType() ) {
+            type = ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
+        } else if( clang_type->isPointerType() ) {
+            type = ClangTypeToASRType(qual_type->getPointeeType());
+            if( !ASRUtils::is_character(*type) ) {
+                type = ASRUtils::TYPE(ASR::make_Pointer_t(al, l, type));
+            }
         } else {
             throw std::runtime_error("clang::QualType not yet supported.");
         }
-        return nullptr;
+
+        if( qualifiers.hasConst() ) {
+            type = ASRUtils::TYPE(ASR::make_Const_t(al, l, type));
+        }
+        return type;
+    }
+
+    bool TraverseParmVarDecl(clang::ParmVarDecl* x) {
+        std::string name = x->getName().str();
+        if( name == "" ) {
+            name = current_scope->get_unique_name("param");
+        }
+        ASR::ttype_t* type = ClangTypeToASRType(x->getType());
+        clang::Expr *init = x->getDefaultArg();
+        ASR::expr_t* asr_init = nullptr;
+        if (init) {
+            TraverseStmt(init);
+            asr_init = ASRUtils::EXPR(tmp);
+        }
+
+        tmp = ASR::make_Variable_t(al, Lloc(x), current_scope, s2c(al, name),
+            nullptr, 0, ASR::intentType::InOut, asr_init, nullptr,
+            ASR::storage_typeType::Default, type, nullptr, ASR::abiType::Source,
+            ASR::accessType::Public, ASR::presenceType::Required, false);
+        current_scope->add_symbol(name, ASR::down_cast<ASR::symbol_t>(tmp));
+        is_stmt_created = false;
+        return true;
+    }
+
+    void handle_printf(clang::CallExpr *x) {
+        Vec<ASR::expr_t*> args;
+        args.reserve(al, 1);
+        for (auto *p : x->arguments()) {
+            TraverseStmt(p);
+            args.push_back(al, ASRUtils::EXPR(tmp));
+        }
+        tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
+        is_stmt_created = true;
+    }
+
+    bool check_printf(ASR::expr_t* callee) {
+        ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
+        return std::string(ASRUtils::symbol_name(callee_Var->m_v)) == "printf";
+    }
+
+    bool TraverseCallExpr(clang::CallExpr *x) {
+        TraverseStmt(x->getCallee());
+        ASR::expr_t* callee = ASRUtils::EXPR(tmp);
+        if( check_printf(callee) ) {
+            handle_printf(x);
+        } else {
+            throw std::runtime_error("Calling user defined functions isn't supported yet.");
+        }
+        return true;
     }
 
     bool TraverseFunctionDecl(clang::FunctionDecl *x) {
@@ -214,6 +274,14 @@ public:
         int64_t i = x->getValue().getLimitedValue();
         tmp = ASR::make_IntegerConstant_t(al, Lloc(x), i,
             ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)));
+        is_stmt_created = false;
+        return true;
+    }
+
+    bool TraverseStringLiteral(clang::StringLiteral *x) {
+        std::string s = x->getString().str();
+        tmp = ASR::make_StringConstant_t(al, Lloc(x), s2c(al, s),
+            ASRUtils::TYPE(ASR::make_Character_t(al, Lloc(x), 1, s.size(), nullptr)));
         is_stmt_created = false;
         return true;
     }
