@@ -1,0 +1,14 @@
+# Possible tests:
+# ast ... run the Parser and output AST, compare against reference version
+# asr ... run the Semantics and output ASR, compare against reference version
+
+# tests
+
+[[test]]
+filename = "test.cpp"
+asr = true
+
+[[test]]
+filename = "expr2.c"
+asr = true
+extra_arg = "-Isrc/runtime/include"
