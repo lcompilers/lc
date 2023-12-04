@@ -1,0 +1,13 @@
+{
+    "basename": "asr-test-63dd31d",
+    "cmd": "lc --asr-dump --no-color {infile} -o {outfile} -extra-arg=\"\"",
+    "infile": "tests/test.cpp",
+    "infile_hash": "9e5ef4c37b7e9e1f13f0082ce65459c1e596430887537eb8fd656b77",
+    "outfile": null,
+    "outfile_hash": null,
+    "stdout": "asr-test-63dd31d.stdout",
+    "stdout_hash": "cd455d981c2048f57208c0276be4cf52c31841c3f404cfbcdf3463f1",
+    "stderr": "asr-test-63dd31d.stderr",
+    "stderr_hash": "ddd9cdace524788d7316e5a86be7985b8064eee50598a8aa7bfd2eb5",
+    "returncode": 0
+}
