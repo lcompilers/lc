@@ -124,5 +124,4 @@ message("WITH_TARGET_X86: ${WITH_TARGET_X86}")
 message("WITH_TARGET_WASM: ${WITH_TARGET_WASM}")
 
 
-add_subdirectory(src/libasr)
 add_subdirectory(src)

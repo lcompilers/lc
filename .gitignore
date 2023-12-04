@@ -29,3 +29,9 @@ fa
 fa2
 lc
 *vscode*
+
+## Byte-compiled / optimized / DLL files
+__pycache__/
+
+## Build files
+output

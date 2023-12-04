@@ -1,0 +1,170 @@
+(TranslationUnit
+    (SymbolTable
+        1
+        {
+            main:
+                (Function
+                    (SymbolTable
+                        3
+                        {
+                            __return_var:
+                                (Variable
+                                    3
+                                    __return_var
+                                    []
+                                    ReturnVar
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            x:
+                                (Variable
+                                    3
+                                    x
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                )
+                        })
+                    main
+                    (FunctionType
+                        []
+                        (Integer 4)
+                        Source
+                        Implementation
+                        ()
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        []
+                        .false.
+                    )
+                    []
+                    []
+                    [(=
+                        (Var 3 x)
+                        (IntegerBinOp
+                            (IntegerBinOp
+                                (IntegerConstant 2 (Integer 4))
+                                Add
+                                (IntegerConstant 3 (Integer 4))
+                                (Integer 4)
+                                ()
+                            )
+                            Mul
+                            (IntegerConstant 5 (Integer 4))
+                            (Integer 4)
+                            ()
+                        )
+                        ()
+                    )
+                    (Print
+                        [(StringConstant
+                            "%d\n"
+                            (Character 1 3 ())
+                        )
+                        (Var 3 x)]
+                        ()
+                        ()
+                    )
+                    (=
+                        (Var 3 __return_var)
+                        (IntegerConstant 0 (Integer 4))
+                        ()
+                    )
+                    (Return)]
+                    (Var 3 __return_var)
+                    Public
+                    .false.
+                    .false.
+                    ()
+                ),
+            printf:
+                (Function
+                    (SymbolTable
+                        2
+                        {
+                            __return_var:
+                                (Variable
+                                    2
+                                    __return_var
+                                    []
+                                    ReturnVar
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            param:
+                                (Variable
+                                    2
+                                    param
+                                    []
+                                    InOut
+                                    ()
+                                    ()
+                                    Default
+                                    (Pointer
+                                        (Const
+                                            (Character 1 -1 ())
+                                        )
+                                    )
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                )
+                        })
+                    printf
+                    (FunctionType
+                        [(Pointer
+                            (Const
+                                (Character 1 -1 ())
+                            )
+                        )]
+                        (Integer 4)
+                        Source
+                        Implementation
+                        ()
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        []
+                        .false.
+                    )
+                    []
+                    [(Var 2 param)]
+                    []
+                    (Var 2 __return_var)
+                    Public
+                    .false.
+                    .false.
+                    ()
+                )
+        })
+    []
+)

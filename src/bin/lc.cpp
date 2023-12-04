@@ -40,6 +40,11 @@ static cl::opt<bool>
     ASRDump("asr-dump", cl::desc("dump the ASR"), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
     NoIndent("no-indent", cl::desc("do not indent output"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    NoColor("no-color", cl::desc("do not use color for ASR"), cl::cat(ClangCheckCategory));
+static cl::opt<std::string>
+    OutputFile("o",
+    cl::desc(Options.getOptionHelpText(options::OPT_o)), cl::cat(ClangCheckCategory));
 
 class ClangCheckActionFactory {
 
@@ -107,11 +112,8 @@ int main(int argc, const char **argv) {
         FrontendActionFactory* FrontendFactory;
         FrontendFactory = LCompilers::newFrontendActionLCompilersFactory<LCompilers::FindNamedClassAction>(al, tu);
         status = Tool.run(FrontendFactory);
-        bool indent = true;
-        if( NoIndent ) {
-            indent = false;
-        }
-        std::cout<< LCompilers::pickle(*tu, true, indent, true) << std::endl;
+        bool indent = !NoIndent, color = !NoColor;
+        std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
     } else {
         status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
     }
