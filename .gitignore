@@ -27,7 +27,7 @@ src/libasr/wasm_visitor.h
 src/libasr/config.h
 fa
 fa2
-lc
+*/bin/lc
 *vscode*
 
 ## Byte-compiled / optimized / DLL files
