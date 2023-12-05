@@ -189,8 +189,13 @@ public:
     void handle_printf(clang::CallExpr *x) {
         Vec<ASR::expr_t*> args;
         args.reserve(al, 1);
+        bool skip_format_str = true;
         for (auto *p : x->arguments()) {
             TraverseStmt(p);
+            if (skip_format_str) {
+                skip_format_str = false;
+                continue;
+            }
             args.push_back(al, ASRUtils::EXPR(tmp));
         }
         tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
