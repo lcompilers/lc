@@ -45,6 +45,12 @@ static cl::opt<bool>
 static cl::opt<std::string>
     OutputFile("o",
     cl::desc(Options.getOptionHelpText(options::OPT_o)), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowWAT("show-wat",
+    cl::desc("Show WAT (WebAssembly Text Format) and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowC("show-c",
+    cl::desc("Show C translation source for the given file and exit"), cl::cat(ClangCheckCategory));
 
 class ClangCheckActionFactory {
 
