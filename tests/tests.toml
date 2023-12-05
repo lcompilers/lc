@@ -7,8 +7,12 @@
 [[test]]
 filename = "test.cpp"
 asr = true
+wat = true
+c = true
 
 [[test]]
 filename = "expr2.c"
-asr = true
 extra_arg = "-Isrc/runtime/include"
+asr = true
+wat = true
+c = true
