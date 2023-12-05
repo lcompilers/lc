@@ -58,9 +58,6 @@ jobs:
             which clang
             which node
 
-            # ./src/bin/lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" --
-            # clang -o my_app expr2.out__generated__.c -I src/libasr/runtime -Wl,-rpath,src/runtime -Lsrc/runtime -llc_runtime
-            # ./my_app
+            ./src/bin/lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" --
 
             ./src/bin/lc examples/expr2.c --backend wasm --extra-arg="-Isrc/runtime/include" --
-            node --experimental-wasi-unstable-preview1 expr2.out__generated__.wasm.js
