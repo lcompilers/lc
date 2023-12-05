@@ -1,0 +1,30 @@
+#include <inttypes.h>
+
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+#include <lfortran_intrinsics.h>
+
+int32_t _xx_lcompilers_changed_main_xx();
+int32_t printf(char * *param);
+
+
+
+// Implementations
+int32_t _xx_lcompilers_changed_main_xx()
+{
+    int32_t __return_var;
+    int32_t x;
+    x = (2 + 3)*5;
+    printf("%s%s%d\n", "%d\n", " ", x);
+    __return_var = 0;
+    return __return_var;
+}
+
+int32_t printf(char * *param)
+{
+    int32_t __return_var;
+    return __return_var;
+}
+

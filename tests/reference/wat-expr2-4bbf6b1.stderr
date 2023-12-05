@@ -1,0 +1,15 @@
+Error while trying to load a compilation database:
+Could not auto-detect compilation database for file "tests/expr2.c"
+No compilation database found in $DIR/tests or any parent directory
+fixed-compilation-database: Error while opening fixed database: No such file or directory
+json-compilation-database: Error while opening JSON database: No such file or directory
+Running without flags.
+[0;33;1mwarning[0;0m[0;1m: Pointers are not currently supported[0;0m
+ [0;34;1m-->[0;0m tests/expr2.c:5:1
+  [0;34;1m|[0;0m
+[0;34;1m5 |[0;0m     x = (2+3)*5;
+  [0;34;1m|[0;0m [0;33;1m^^^^^^^^^^^^ emitting integer for now[0;0m
+
+
+[0;1mNote[0;0m: Please report unclear or confusing messages as bugs at
+https://github.com/lfortran/lfortran/issues.

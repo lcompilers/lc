@@ -1,0 +1,21 @@
+#include <inttypes.h>
+
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+#include <lfortran_intrinsics.h>
+
+int32_t f(int32_t *x);
+
+
+
+// Implementations
+int32_t f(int32_t *x)
+{
+    int32_t __return_var;
+    int32_t result;
+    __return_var = result;
+    return __return_var;
+}
+

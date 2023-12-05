@@ -281,7 +281,9 @@ public:
         v_m_type = ASRUtils::type_get_past_array(ASRUtils::type_get_past_allocatable(v_m_type));
         if (ASRUtils::is_pointer(v_m_type)) {
             ASR::ttype_t *t2 = ASR::down_cast<ASR::Pointer_t>(v_m_type)->m_type;
-            t2 = ASRUtils::type_get_past_array(t2);
+            // TODO: const type in the below line should be ideally
+            // incorporated in the generated c data type.
+            t2 = ASRUtils::type_get_past_const(ASRUtils::type_get_past_array(t2));
             if (ASRUtils::is_integer(*t2)) {
                 ASR::Integer_t *t = ASR::down_cast<ASR::Integer_t>(ASRUtils::type_get_past_array(t2));
                 std::string type_name = "int" + std::to_string(t->m_kind * 8) + "_t";
@@ -363,6 +365,10 @@ public:
                     std::string dims = convert_dims_c(n_dims, m_dims, v_m_type, is_fixed_size);
                     sub = format_type_c(dims, type_name, v.m_name, use_ref, dummy);
                 }
+            } else if (ASRUtils::is_character(*t2)) {
+                bool is_fixed_size = true;
+                std::string dims = convert_dims_c(n_dims, m_dims, v_m_type, is_fixed_size);
+                sub = format_type_c(dims, "char *", v.m_name, use_ref, dummy);
             } else if(ASR::is_a<ASR::Struct_t>(*t2)) {
                 ASR::Struct_t *t = ASR::down_cast<ASR::Struct_t>(t2);
                 std::string der_type_name = ASRUtils::symbol_name(t->m_derived_type);

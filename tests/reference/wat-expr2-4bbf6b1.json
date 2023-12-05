@@ -1,0 +1,13 @@
+{
+    "basename": "wat-expr2-4bbf6b1",
+    "cmd": "lc --no-color --show-wat {infile} -extra-arg=\"-Isrc/runtime/include\"",
+    "infile": "tests/expr2.c",
+    "infile_hash": "11cb114715d67a4763454167abc900089b2119ecf18a980d18a30322",
+    "outfile": null,
+    "outfile_hash": null,
+    "stdout": "wat-expr2-4bbf6b1.stdout",
+    "stdout_hash": "b7a97558339a290cf15d8042b51d4f11ee8460bca568996113d213cb",
+    "stderr": "wat-expr2-4bbf6b1.stderr",
+    "stderr_hash": "8701bf4e4a8dad0af39b73025f7e97f4d755430e062e5ab705cd76cf",
+    "returncode": 0
+}

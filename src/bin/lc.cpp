@@ -12,10 +12,13 @@
 #include <libasr/string_utils.h>
 #include <libasr/asr_utils.h>
 #include <libasr/assert.h>
+#include <libasr/pass/pass_manager.h>
+#include <libasr/pickle.h>
+#include <libasr/codegen/asr_to_c.h>
+#include <libasr/codegen/asr_to_wasm.h>
+#include <libasr/codegen/wasm_to_wat.h>
 
 #include "clang_ast_to_asr.h"
-
-#include <libasr/pickle.h>
 
 #include <iostream>
 
@@ -45,6 +48,12 @@ static cl::opt<bool>
 static cl::opt<std::string>
     OutputFile("o",
     cl::desc(Options.getOptionHelpText(options::OPT_o)), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowWAT("show-wat",
+    cl::desc("Show WAT (WebAssembly Text Format) and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowC("show-c",
+    cl::desc("Show C translation source for the given file and exit"), cl::cat(ClangCheckCategory));
 
 class ClangCheckActionFactory {
 
@@ -91,6 +100,71 @@ namespace LCompilers {
 
 }
 
+int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t *asr) {
+    LCompilers::CompilerOptions compiler_options;
+    LCompilers::diag::Diagnostics diagnostics;
+    LCompilers::LocationManager lm;
+    {
+        LCompilers::LocationManager::FileLocations fl;
+        fl.in_filename = infile;
+        lm.files.push_back(fl);
+        std::string input = LCompilers::read_file(infile);
+        lm.init_simple(input);
+        lm.file_ends.push_back(input.size());
+    }
+    compiler_options.po.always_run = true;
+    compiler_options.po.run_fun = "f";
+    diagnostics.diagnostics.clear();
+    LCompilers::Result<LCompilers::Vec<uint8_t>> r2 = LCompilers::asr_to_wasm_bytes_stream(*asr, al, diagnostics, compiler_options);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!r2.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+
+    diagnostics.diagnostics.clear();
+    LCompilers::Result<std::string> res = LCompilers::wasm_to_wat(r2.result, al, diagnostics);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 2;
+    }
+    std::cout << res.result;
+    return 0;
+}
+
+int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+    LCompilers::PassManager pass_manager;
+    LCompilers::CompilerOptions compiler_options;
+    LCompilers::diag::Diagnostics diagnostics;
+    LCompilers::LocationManager lm;
+    {
+        LCompilers::LocationManager::FileLocations fl;
+        fl.in_filename = infile;
+        lm.files.push_back(fl);
+        std::string input = LCompilers::read_file(infile);
+        lm.init_simple(input);
+        lm.file_ends.push_back(input.size());
+    }
+
+    // Apply ASR passes
+    pass_manager.use_default_passes(true);
+    compiler_options.po.always_run = true;
+    compiler_options.po.run_fun = "f";
+
+    pass_manager.apply_passes(al, asr, compiler_options.po, diagnostics);
+
+    diagnostics.diagnostics.clear();
+    auto res = LCompilers::asr_to_c(al, *asr, diagnostics, compiler_options, 0);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    std::cout << res.result;
+    return 0;
+}
+
 int main(int argc, const char **argv) {
     auto ExpectedParser = CommonOptionsParser::create(argc, argv, ClangCheckCategory);
     if (!ExpectedParser) {
@@ -99,7 +173,8 @@ int main(int argc, const char **argv) {
     }
 
     CommonOptionsParser &OptionsParser = ExpectedParser.get();
-    ClangTool Tool(OptionsParser.getCompilations(), OptionsParser.getSourcePathList());
+    std::vector<std::string> sourcePaths = OptionsParser.getSourcePathList();
+    ClangTool Tool(OptionsParser.getCompilations(), sourcePaths);
 
     ClangCheckActionFactory CheckFactory;
 
@@ -108,12 +183,21 @@ int main(int argc, const char **argv) {
 
     // Choose the correct factory based on the selected mode.
     int status;
-    if (ASRDump) {
+    if (ASRDump || ShowWAT || ShowC) {
         FrontendActionFactory* FrontendFactory;
         FrontendFactory = LCompilers::newFrontendActionLCompilersFactory<LCompilers::FindNamedClassAction>(al, tu);
         status = Tool.run(FrontendFactory);
-        bool indent = !NoIndent, color = !NoColor;
-        std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
+        if (status != 0) {
+            return status;
+        }
+        if (ASRDump) {
+            bool indent = !NoIndent, color = !NoColor;
+            std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
+        } else if (ShowWAT) {
+            status = emit_wat(al, sourcePaths[0], (LCompilers::ASR::TranslationUnit_t*)tu);
+        } else if (ShowC) {
+            status = emit_c(al, sourcePaths[0], (LCompilers::ASR::TranslationUnit_t*)tu);
+        }
     } else {
         status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
     }
