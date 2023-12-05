@@ -166,30 +166,32 @@ int main(int argc, const char **argv) {
     std::vector<std::string> sourcePaths = OptionsParser.getSourcePathList();
     ClangTool Tool(OptionsParser.getCompilations(), sourcePaths);
 
-    ClangCheckActionFactory CheckFactory;
+    // Handle Clang related options in the following
+    if (ASTDump || ASTList || ASTPrint) {
+        ClangCheckActionFactory CheckFactory;
+        int status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
+        return status;
+    }
 
+    // Handle LC related options
     Allocator al(4*1024);
     LCompilers::ASR::asr_t* tu = nullptr;
+    FrontendActionFactory* FrontendFactory;
+    FrontendFactory = LCompilers::newFrontendActionLCompilersFactory<LCompilers::FindNamedClassAction>(al, tu);
+    int status = Tool.run(FrontendFactory);
+    if (status != 0) {
+        return status;
+    }
 
-    // Choose the correct factory based on the selected mode.
-    int status;
-    if (ASRDump || ShowWAT || ShowC) {
-        FrontendActionFactory* FrontendFactory;
-        FrontendFactory = LCompilers::newFrontendActionLCompilersFactory<LCompilers::FindNamedClassAction>(al, tu);
-        status = Tool.run(FrontendFactory);
-        if (status != 0) {
-            return status;
-        }
-        if (ASRDump) {
-            bool indent = !NoIndent, color = !NoColor;
-            std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
-        } else if (ShowWAT) {
-            status = emit_wat(al, sourcePaths[0], (LCompilers::ASR::TranslationUnit_t*)tu);
-        } else if (ShowC) {
-            status = emit_c(al, sourcePaths[0], (LCompilers::ASR::TranslationUnit_t*)tu);
-        }
-    } else {
-        status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
+    std::string infile = sourcePaths[0];
+    if (ASRDump) {
+        bool indent = !NoIndent, color = !NoColor;
+        std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
+        return 0;
+    } else if (ShowWAT) {
+        return emit_wat(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (ShowC) {
+        return emit_c(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
     return status;
