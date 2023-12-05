@@ -24,6 +24,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
     llvm_dbg = is_included("llvm_dbg")
     cpp = is_included("cpp")
     c = is_included("c")
+    fortran = is_included("fortran")
     is_cumulative = is_included("cumulative")
     wat = is_included("wat")
     clang_extra_arg = test.get("extra_arg", "")
@@ -108,6 +109,9 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
                  filename, update_reference, extra_args)
     if wat:
         run_test(filename, "wat", "lc --no-color --show-wat {infile}" + f' -extra-arg="{clang_extra_arg}"',
+                 filename, update_reference, extra_args)
+    if fortran:
+        run_test(filename, "fortran", "lc --no-color --show-fortran {infile}" + f' -extra-arg="{clang_extra_arg}"',
                  filename, update_reference, extra_args)
 
 if __name__ == "__main__":
