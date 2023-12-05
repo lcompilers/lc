@@ -328,6 +328,7 @@ public:
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
         ASR::symbol_t* sym = current_scope->resolve_symbol(name);
+        LCOMPILERS_ASSERT(sym != nullptr);
         tmp = ASR::make_Var_t(al, Lloc(x), sym);
         is_stmt_created = false;
         return true;
