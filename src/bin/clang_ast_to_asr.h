@@ -135,6 +135,8 @@ public:
         }
 
         construct_program();
+        // remove printf definition
+        ((ASR::TranslationUnit_t*)tu)->m_symtab->erase_symbol("printf");
 
         return true;
     }
