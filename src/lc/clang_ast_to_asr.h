@@ -269,6 +269,13 @@ public:
             ASR::accessType::Public, ASR::presenceType::Required, false));
         current_scope->add_symbol(name, v);
         is_stmt_created = false;
+        if (x->hasInit()) {
+            TraverseStmt(x->getInit());
+            ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
+            ASR::expr_t* var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), v));
+            tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
+            is_stmt_created = true;
+        }
         return true;
     }
 
