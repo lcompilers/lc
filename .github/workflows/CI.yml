@@ -13,12 +13,12 @@ on:
 
 jobs:
   Build:
-    name: LFortran CI (${{ matrix.python-version }}, ${{ matrix.os }})
+    name: LFortran CI (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest"]
+        os: ["ubuntu-latest", "macos-latest"]
     steps:
       - uses: actions/checkout@v3
         with:
