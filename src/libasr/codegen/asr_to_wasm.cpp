@@ -859,6 +859,7 @@ class ASRToWASMVisitor : public ASR::BaseVisitor<ASRToWASMVisitor> {
         if (ASRUtils::is_pointer(v->m_type)) {
             ASR::ttype_t *t2 =
                 ASR::down_cast<ASR::Pointer_t>(v->m_type)->m_type;
+            t2 = ASRUtils::type_get_past_const(t2);
             if (ASRUtils::is_integer(*t2)) {
                 ASR::Integer_t *t = ASR::down_cast<ASR::Integer_t>(t2);
                 diag.codegen_warning_label(
@@ -871,6 +872,17 @@ class ASRToWASMVisitor : public ASR::BaseVisitor<ASRToWASMVisitor> {
                 } else {
                     throw CodeGenError(
                         "Integers of kind 4 and 8 only supported");
+                }
+            } else if (ASRUtils::is_character(*t2)) {
+                ASR::Character_t *t = ASR::down_cast<ASR::Character_t>(t2);
+                diag.codegen_warning_label(
+                    "Pointers are not currently supported", {v->base.base.loc},
+                    "emitting integer for now");
+                if (t->m_kind == 1) {
+                    type_vec.push_back(i32);
+                } else {
+                    throw CodeGenError(
+                        "Characters of kind 1 only supported");
                 }
             } else {
                 diag.codegen_error_label("Type number '" +
