@@ -100,21 +100,25 @@ namespace LCompilers {
 
 }
 
+#define DeclareLCompilersUtilVars \
+    LCompilers::CompilerOptions compiler_options; \
+    LCompilers::diag::Diagnostics diagnostics; \
+    LCompilers::LocationManager lm; \
+    { \
+        LCompilers::LocationManager::FileLocations fl; \
+        fl.in_filename = infile; \
+        lm.files.push_back(fl); \
+        std::string input = LCompilers::read_file(infile); \
+        lm.init_simple(input); \
+        lm.file_ends.push_back(input.size()); \
+    } \
+    compiler_options.po.always_run = true; \
+    compiler_options.po.run_fun = "f"; \
+    diagnostics.diagnostics.clear(); \
+
 int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t *asr) {
-    LCompilers::CompilerOptions compiler_options;
-    LCompilers::diag::Diagnostics diagnostics;
-    LCompilers::LocationManager lm;
-    {
-        LCompilers::LocationManager::FileLocations fl;
-        fl.in_filename = infile;
-        lm.files.push_back(fl);
-        std::string input = LCompilers::read_file(infile);
-        lm.init_simple(input);
-        lm.file_ends.push_back(input.size());
-    }
-    compiler_options.po.always_run = true;
-    compiler_options.po.run_fun = "f";
-    diagnostics.diagnostics.clear();
+    DeclareLCompilersUtilVars;
+
     LCompilers::Result<LCompilers::Vec<uint8_t>> r2 = LCompilers::asr_to_wasm_bytes_stream(*asr, al, diagnostics, compiler_options);
     std::cerr << diagnostics.render(lm, compiler_options);
     if (!r2.ok) {
@@ -134,27 +138,13 @@ int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUni
 }
 
 int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
-    LCompilers::PassManager pass_manager;
-    LCompilers::CompilerOptions compiler_options;
-    LCompilers::diag::Diagnostics diagnostics;
-    LCompilers::LocationManager lm;
-    {
-        LCompilers::LocationManager::FileLocations fl;
-        fl.in_filename = infile;
-        lm.files.push_back(fl);
-        std::string input = LCompilers::read_file(infile);
-        lm.init_simple(input);
-        lm.file_ends.push_back(input.size());
-    }
+    DeclareLCompilersUtilVars;
 
     // Apply ASR passes
+    LCompilers::PassManager pass_manager;
     pass_manager.use_default_passes(true);
-    compiler_options.po.always_run = true;
-    compiler_options.po.run_fun = "f";
-
     pass_manager.apply_passes(al, asr, compiler_options.po, diagnostics);
 
-    diagnostics.diagnostics.clear();
     auto res = LCompilers::asr_to_c(al, *asr, diagnostics, compiler_options, 0);
     std::cerr << diagnostics.render(lm, compiler_options);
     if (!res.ok) {
