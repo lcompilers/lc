@@ -56,6 +56,15 @@ static cl::opt<bool>
 static cl::opt<bool>
     ShowC("show-c",
     cl::desc("Show C translation source for the given file and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowCPP("show-cpp",
+    cl::desc("Show C++ translation source for the given file and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowFortran("show-fortran",
+    cl::desc("Show Fortran translation source for the given file and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowLLVM("show-llvm",
+    cl::desc("Show LLVM IR for the given file and exit"), cl::cat(ClangCheckCategory));
 static cl::opt<std::string>
     ArgBackend("backend",
     cl::desc("Select a backend (wasm, c)"), cl::cat(ClangCheckCategory));
