@@ -63,6 +63,67 @@ public:
         return std::to_string(first) + ":" + std::to_string(last);
     }
 
+    ASR::symbol_t* declare_dummy_variable(std::string var_name, SymbolTable* scope, Location& loc, ASR::ttype_t* var_type) {
+        var_name = scope->get_unique_name(var_name, false);
+        SetChar variable_dependencies_vec;
+        variable_dependencies_vec.reserve(al, 1);
+        ASRUtils::collect_variable_dependencies(al, variable_dependencies_vec, var_type);
+        ASR::asr_t* variable_asr = ASR::make_Variable_t(al, loc, scope,
+                                        s2c(al, var_name), variable_dependencies_vec.p,
+                                        variable_dependencies_vec.size(), ASR::intentType::Local,
+                                        nullptr, nullptr, ASR::storage_typeType::Default,
+                                        var_type, nullptr, ASR::abiType::Source, ASR::accessType::Public,
+                                        ASR::presenceType::Required, false);
+        ASR::symbol_t* dummy_variable_sym = ASR::down_cast<ASR::symbol_t>(variable_asr);
+        scope->add_symbol(var_name, dummy_variable_sym);
+        return dummy_variable_sym;
+    }
+
+    void construct_program() {
+        // Convert the main function into a program
+        ASR::TranslationUnit_t* tu = (ASR::TranslationUnit_t*)this->tu;
+        Location& loc = tu->base.base.loc;
+
+        Vec<ASR::stmt_t*> prog_body;
+        prog_body.reserve(al, 1);
+        SetChar prog_dep;
+        prog_dep.reserve(al, 1);
+        SymbolTable *program_scope = al.make_new<SymbolTable>(tu->m_symtab);
+
+        std::string main_func = "main";
+        ASR::symbol_t *main_sym = tu->m_symtab->resolve_symbol(main_func);
+        LCOMPILERS_ASSERT(main_sym);
+        if (main_sym == nullptr) {
+            return;
+        }
+        ASR::Function_t *main = ASR::down_cast<ASR::Function_t>(main_sym);
+        LCOMPILERS_ASSERT(main);
+
+        // Make a FunctionCall to main
+        ASR::ttype_t *int32_type = ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4));
+        ASR::asr_t* func_call_main = ASR::make_FunctionCall_t(al, loc, main_sym, main_sym,
+             nullptr, 0, int32_type, nullptr, nullptr);
+
+        ASR::symbol_t* exit_variable_sym = declare_dummy_variable("exit_code", program_scope, loc, int32_type);
+        ASR::expr_t* variable_var = ASRUtils::EXPR(ASR::make_Var_t(al, loc, exit_variable_sym));
+        ASR::asr_t* assign_stmt = ASR::make_Assignment_t(al, loc, variable_var, ASRUtils::EXPR(func_call_main), nullptr);
+
+        prog_body.push_back(al, ASRUtils::STMT(assign_stmt));
+
+        prog_dep.push_back(al, s2c(al, main_func));
+
+        std::string prog_name = "main_program";
+        ASR::asr_t *prog = ASR::make_Program_t(
+            al, loc,
+            /* a_symtab */ program_scope,
+            /* a_name */ s2c(al, prog_name),
+            prog_dep.p,
+            prog_dep.n,
+            /* a_body */ prog_body.p,
+            /* n_body */ prog_body.n);
+        tu->m_symtab->add_symbol(prog_name, ASR::down_cast<ASR::symbol_t>(prog));
+    }
+
     bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
         SymbolTable *parent_scope = al.make_new<SymbolTable>(nullptr);
         current_scope = parent_scope;
@@ -72,6 +133,10 @@ public:
         for (auto D = x->decls_begin(), DEnd = x->decls_end(); D != DEnd; ++D) {
             TraverseDecl(*D);
         }
+
+        construct_program();
+        // remove printf definition
+        ((ASR::TranslationUnit_t*)tu)->m_symtab->erase_symbol("printf");
 
         return true;
     }
@@ -126,8 +191,13 @@ public:
     void handle_printf(clang::CallExpr *x) {
         Vec<ASR::expr_t*> args;
         args.reserve(al, 1);
+        bool skip_format_str = true;
         for (auto *p : x->arguments()) {
             TraverseStmt(p);
+            if (skip_format_str) {
+                skip_format_str = false;
+                continue;
+            }
             args.push_back(al, ASRUtils::EXPR(tmp));
         }
         tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
@@ -265,6 +335,7 @@ public:
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
         ASR::symbol_t* sym = current_scope->resolve_symbol(name);
+        LCOMPILERS_ASSERT(sym != nullptr);
         tmp = ASR::make_Var_t(al, Lloc(x), sym);
         is_stmt_created = false;
         return true;

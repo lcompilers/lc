@@ -46,7 +46,7 @@ static cl::opt<bool>
 static cl::opt<bool>
     NoColor("no-color", cl::desc("do not use color for ASR"), cl::cat(ClangCheckCategory));
 static cl::opt<std::string>
-    OutputFile("o",
+    ArgO("o",
     cl::desc(Options.getOptionHelpText(options::OPT_o)), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
     ShowWAT("show-wat",
@@ -54,6 +54,45 @@ static cl::opt<bool>
 static cl::opt<bool>
     ShowC("show-c",
     cl::desc("Show C translation source for the given file and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<std::string>
+    ArgBackend("backend",
+    cl::desc("Select a backend (wasm, c)"), cl::cat(ClangCheckCategory));
+
+enum class Backend {
+    llvm, wasm, c
+};
+
+std::map<std::string, Backend> string_to_backend = {
+    {"", Backend::llvm}, // by default it is llvm
+    {"llvm", Backend::llvm},
+    {"wasm", Backend::wasm},
+    {"c", Backend::c},
+};
+
+std::string remove_extension(const std::string& filename) {
+    size_t lastdot = filename.find_last_of(".");
+    if (lastdot == std::string::npos) return filename;
+    return filename.substr(0, lastdot);
+}
+
+std::string remove_path(const std::string& filename) {
+    size_t lastslash = filename.find_last_of("/");
+    if (lastslash == std::string::npos) return filename;
+    return filename.substr(lastslash+1);
+}
+
+std::string construct_outfile(std::string &arg_file, std::string &ArgO) {
+    std::string outfile;
+    std::string basename;
+    basename = remove_extension(arg_file);
+    basename = remove_path(basename);
+    if (ArgO.size() > 0) {
+        outfile = ArgO;
+    } else {
+        outfile = basename + ".out";
+    }
+    return outfile;
+}
 
 class ClangCheckActionFactory {
 
@@ -100,21 +139,25 @@ namespace LCompilers {
 
 }
 
+#define DeclareLCompilersUtilVars \
+    LCompilers::CompilerOptions compiler_options; \
+    LCompilers::diag::Diagnostics diagnostics; \
+    LCompilers::LocationManager lm; \
+    { \
+        LCompilers::LocationManager::FileLocations fl; \
+        fl.in_filename = infile; \
+        lm.files.push_back(fl); \
+        std::string input = LCompilers::read_file(infile); \
+        lm.init_simple(input); \
+        lm.file_ends.push_back(input.size()); \
+    } \
+    compiler_options.po.always_run = true; \
+    compiler_options.po.run_fun = "f"; \
+    diagnostics.diagnostics.clear(); \
+
 int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t *asr) {
-    LCompilers::CompilerOptions compiler_options;
-    LCompilers::diag::Diagnostics diagnostics;
-    LCompilers::LocationManager lm;
-    {
-        LCompilers::LocationManager::FileLocations fl;
-        fl.in_filename = infile;
-        lm.files.push_back(fl);
-        std::string input = LCompilers::read_file(infile);
-        lm.init_simple(input);
-        lm.file_ends.push_back(input.size());
-    }
-    compiler_options.po.always_run = true;
-    compiler_options.po.run_fun = "f";
-    diagnostics.diagnostics.clear();
+    DeclareLCompilersUtilVars;
+
     LCompilers::Result<LCompilers::Vec<uint8_t>> r2 = LCompilers::asr_to_wasm_bytes_stream(*asr, al, diagnostics, compiler_options);
     std::cerr << diagnostics.render(lm, compiler_options);
     if (!r2.ok) {
@@ -134,27 +177,13 @@ int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUni
 }
 
 int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
-    LCompilers::PassManager pass_manager;
-    LCompilers::CompilerOptions compiler_options;
-    LCompilers::diag::Diagnostics diagnostics;
-    LCompilers::LocationManager lm;
-    {
-        LCompilers::LocationManager::FileLocations fl;
-        fl.in_filename = infile;
-        lm.files.push_back(fl);
-        std::string input = LCompilers::read_file(infile);
-        lm.init_simple(input);
-        lm.file_ends.push_back(input.size());
-    }
+    DeclareLCompilersUtilVars;
 
     // Apply ASR passes
+    LCompilers::PassManager pass_manager;
     pass_manager.use_default_passes(true);
-    compiler_options.po.always_run = true;
-    compiler_options.po.run_fun = "f";
-
     pass_manager.apply_passes(al, asr, compiler_options.po, diagnostics);
 
-    diagnostics.diagnostics.clear();
     auto res = LCompilers::asr_to_c(al, *asr, diagnostics, compiler_options, 0);
     std::cerr << diagnostics.render(lm, compiler_options);
     if (!res.ok) {
@@ -162,6 +191,40 @@ int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_
         return 1;
     }
     std::cout << res.result;
+    return 0;
+}
+
+int compile_to_binary_wasm(
+    Allocator &al, const std::string &infile,
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+    LCompilers::Result<int> res = LCompilers::asr_to_wasm(*asr, al,  outfile, false, diagnostics, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    return 0;
+}
+
+int compile_to_c(Allocator &al, const std::string &infile,
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    // Apply ASR passes
+    LCompilers::PassManager pass_manager;
+    pass_manager.use_default_passes(true);
+    pass_manager.apply_passes(al, asr, compiler_options.po, diagnostics);
+
+    auto res = LCompilers::asr_to_c(al, *asr, diagnostics, compiler_options, 0);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    FILE *fp;
+    fp = fopen(outfile.c_str(), "w");
+    fputs(res.result.c_str(), fp);
+    fclose(fp);
     return 0;
 }
 
@@ -176,30 +239,48 @@ int main(int argc, const char **argv) {
     std::vector<std::string> sourcePaths = OptionsParser.getSourcePathList();
     ClangTool Tool(OptionsParser.getCompilations(), sourcePaths);
 
-    ClangCheckActionFactory CheckFactory;
+    // Handle Clang related options in the following
+    if (ASTDump || ASTList || ASTPrint) {
+        ClangCheckActionFactory CheckFactory;
+        int status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
+        return status;
+    }
 
+    // Handle LC related options
     Allocator al(4*1024);
     LCompilers::ASR::asr_t* tu = nullptr;
+    FrontendActionFactory* FrontendFactory;
+    FrontendFactory = LCompilers::newFrontendActionLCompilersFactory<LCompilers::FindNamedClassAction>(al, tu);
+    int status = Tool.run(FrontendFactory);
+    if (status != 0) {
+        return status;
+    }
 
-    // Choose the correct factory based on the selected mode.
-    int status;
-    if (ASRDump || ShowWAT || ShowC) {
-        FrontendActionFactory* FrontendFactory;
-        FrontendFactory = LCompilers::newFrontendActionLCompilersFactory<LCompilers::FindNamedClassAction>(al, tu);
-        status = Tool.run(FrontendFactory);
-        if (status != 0) {
-            return status;
-        }
-        if (ASRDump) {
-            bool indent = !NoIndent, color = !NoColor;
-            std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
-        } else if (ShowWAT) {
-            status = emit_wat(al, sourcePaths[0], (LCompilers::ASR::TranslationUnit_t*)tu);
-        } else if (ShowC) {
-            status = emit_c(al, sourcePaths[0], (LCompilers::ASR::TranslationUnit_t*)tu);
-        }
-    } else {
-        status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
+    std::string infile = sourcePaths[0];
+    if (ASRDump) {
+        bool indent = !NoIndent, color = !NoColor;
+        std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
+        return 0;
+    } else if (ShowWAT) {
+        return emit_wat(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (ShowC) {
+        return emit_c(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    }
+
+    // compile to binary
+    std::string outfile = construct_outfile(infile, ArgO);
+
+    Backend backend;
+    if (string_to_backend.find(ArgBackend) != string_to_backend.end()) {
+        backend = string_to_backend[ArgBackend];
+    }
+
+    if (backend == Backend::wasm) {
+        outfile += "__generated__.wasm";
+        status = compile_to_binary_wasm(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (backend == Backend::c) {
+        outfile += "__generated__.c";
+        status = compile_to_c(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
     return status;
