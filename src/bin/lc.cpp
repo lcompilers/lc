@@ -16,6 +16,9 @@
 #include <libasr/pickle.h>
 #include <libasr/codegen/evaluator.h>
 #include <libasr/codegen/asr_to_c.h>
+#include <libasr/codegen/asr_to_cpp.h>
+#include <libasr/codegen/asr_to_fortran.h>
+#include <libasr/codegen/asr_to_llvm.h>
 #include <libasr/codegen/asr_to_wasm.h>
 #include <libasr/codegen/wasm_to_wat.h>
 
@@ -202,6 +205,65 @@ int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_
         return 1;
     }
     std::cout << res.result;
+    return 0;
+}
+
+int emit_cpp(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    // Apply ASR passes
+    LCompilers::PassManager pass_manager;
+    pass_manager.use_default_passes(true);
+    pass_manager.apply_passes(al, asr, compiler_options.po, diagnostics);
+
+    auto res = LCompilers::asr_to_cpp(al, *asr, diagnostics, compiler_options, 0);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    std::cout << res.result;
+    return 0;
+}
+
+int emit_fortran(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    auto res = LCompilers::asr_to_fortran(*asr, diagnostics, false, 4);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    std::cout << res.result;
+    return 0;
+}
+
+int emit_llvm(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    LCompilers::PassManager pass_manager;
+    LCompilers::LLVMEvaluator e(compiler_options.target);
+
+    std::string run_fn = "__lfortran_evaluate_0";
+
+    std::unique_ptr<LCompilers::LLVMModule> m;
+    LCompilers::Result<std::unique_ptr<LCompilers::LLVMModule>> res
+        = asr_to_llvm(*asr, diagnostics, e.get_context(), al,
+            pass_manager, compiler_options, run_fn, infile);
+    if (res.ok) {
+        m = std::move(res.result);
+    } else {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    std::cerr << diagnostics.render(lm, compiler_options);
+
+    if (compiler_options.po.fast) {
+        e.opt(*m->m_m);
+    }
+
+    std::cout << m->str();
     return 0;
 }
 
@@ -532,6 +594,12 @@ int main(int argc, const char **argv) {
         return emit_wat(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
     } else if (ShowC) {
         return emit_c(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (ShowCPP) {
+        return emit_cpp(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (ShowFortran) {
+        return emit_fortran(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (ShowLLVM) {
+        return emit_llvm(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
     // compile to binary
