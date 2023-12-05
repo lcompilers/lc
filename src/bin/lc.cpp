@@ -46,7 +46,7 @@ static cl::opt<bool>
 static cl::opt<bool>
     NoColor("no-color", cl::desc("do not use color for ASR"), cl::cat(ClangCheckCategory));
 static cl::opt<std::string>
-    OutputFile("o",
+    ArgO("o",
     cl::desc(Options.getOptionHelpText(options::OPT_o)), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
     ShowWAT("show-wat",
@@ -54,6 +54,20 @@ static cl::opt<bool>
 static cl::opt<bool>
     ShowC("show-c",
     cl::desc("Show C translation source for the given file and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<std::string>
+    ArgBackend("backend",
+    cl::desc("Select a backend (wasm, c)"), cl::cat(ClangCheckCategory));
+
+enum class Backend {
+    llvm, wasm, c
+};
+
+std::map<std::string, Backend> string_to_backend = {
+    {"", Backend::llvm}, // by default it is llvm
+    {"llvm", Backend::llvm},
+    {"wasm", Backend::wasm},
+    {"c", Backend::c},
+};
 
 class ClangCheckActionFactory {
 
