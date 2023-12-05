@@ -19,6 +19,7 @@
 #include <libasr/codegen/wasm_to_wat.h>
 
 #include "clang_ast_to_asr.h"
+#include <lc/utils.h>
 
 #include <iostream>
 
