@@ -102,6 +102,18 @@ if (WITH_LLVM)
         ${CLANG_LIBRARIES})
 endif()
 
+set(WITH_MACHO no
+    CACHE BOOL "Build with mach-o support")
+
+if (APPLE)
+    set(WITH_MACHO yes)
+endif()
+
+if (WITH_MACHO)
+    find_package(MACHO REQUIRED)
+    set(HAVE_LFORTRAN_MACHO yes)
+endif()
+
 enable_testing()
 
 message("\n")
