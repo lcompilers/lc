@@ -194,6 +194,40 @@ int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_
     return 0;
 }
 
+int compile_to_binary_wasm(
+    Allocator &al, const std::string &infile,
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+    LCompilers::Result<int> res = LCompilers::asr_to_wasm(*asr, al,  outfile, false, diagnostics, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    return 0;
+}
+
+int compile_to_c(Allocator &al, const std::string &infile,
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    // Apply ASR passes
+    LCompilers::PassManager pass_manager;
+    pass_manager.use_default_passes(true);
+    pass_manager.apply_passes(al, asr, compiler_options.po, diagnostics);
+
+    auto res = LCompilers::asr_to_c(al, *asr, diagnostics, compiler_options, 0);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    FILE *fp;
+    fp = fopen(outfile.c_str(), "w");
+    fputs(res.result.c_str(), fp);
+    fclose(fp);
+    return 0;
+}
+
 int main(int argc, const char **argv) {
     auto ExpectedParser = CommonOptionsParser::create(argc, argv, ClangCheckCategory);
     if (!ExpectedParser) {
@@ -235,6 +269,17 @@ int main(int argc, const char **argv) {
 
     // compile to binary
     std::string outfile = construct_outfile(infile, ArgO);
+
+    Backend backend;
+    if (string_to_backend.find(ArgBackend) != string_to_backend.end()) {
+        backend = string_to_backend[ArgBackend];
+    }
+
+    if (backend == Backend::wasm) {
+        status = compile_to_binary_wasm(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (backend == Backend::c) {
+        status = compile_to_c(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    }
 
     return status;
 }
