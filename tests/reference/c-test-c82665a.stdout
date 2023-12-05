@@ -15,6 +15,7 @@ int32_t f(int32_t *x)
 {
     int32_t __return_var;
     int32_t result;
+    result = (*x)/42;
     __return_var = result;
     return __return_var;
 }
