@@ -276,8 +276,10 @@ int main(int argc, const char **argv) {
     }
 
     if (backend == Backend::wasm) {
+        outfile += "__generated__.wasm";
         status = compile_to_binary_wasm(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
     } else if (backend == Backend::c) {
+        outfile += "__generated__.c";
         status = compile_to_c(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 

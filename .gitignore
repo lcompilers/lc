@@ -33,5 +33,7 @@ lc
 ## Byte-compiled / optimized / DLL files
 __pycache__/
 
-## Build files
+## Output files
 output
+*__generated__.*
+*.out
