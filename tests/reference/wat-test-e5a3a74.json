@@ -1,0 +1,13 @@
+{
+    "basename": "wat-test-e5a3a74",
+    "cmd": "lc --no-color --show-wat {infile} -extra-arg=\"\"",
+    "infile": "tests/test.cpp",
+    "infile_hash": "9e5ef4c37b7e9e1f13f0082ce65459c1e596430887537eb8fd656b77",
+    "outfile": null,
+    "outfile_hash": null,
+    "stdout": "wat-test-e5a3a74.stdout",
+    "stdout_hash": "0e5c2efeca9f0626ad16508514a0a294d50bdef4a5b4763a15ad8bff",
+    "stderr": "wat-test-e5a3a74.stderr",
+    "stderr_hash": "ddd9cdace524788d7316e5a86be7985b8064eee50598a8aa7bfd2eb5",
+    "returncode": 0
+}
