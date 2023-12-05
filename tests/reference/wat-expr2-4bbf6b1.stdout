@@ -2,7 +2,7 @@
     (type (;0;) (func (param i32) (result)))
     (type (;1;) (func (param i32 i32 i32 i32) (result i32)))
     (type (;2;) (func (param) (result i32)))
-    (type (;3;) (func (param i32) (result i32)))
+    (type (;3;) (func (param) (result)))
     (type (;4;) (func (param i64) (result)))
     (import "wasi_snapshot_preview1" "proc_exit" (func (;0;) (type 0)))
     (import "wasi_snapshot_preview1" "fd_write" (func (;1;) (type 1)))
@@ -21,18 +21,6 @@
         i32.const 5
         i32.mul
         local.set 1
-        i32.const 1
-        i32.const 208
-        i32.const 1
-        i32.const 0
-        call 1
-        drop
-        i32.const 1
-        i32.const 4
-        i32.const 1
-        i32.const 0
-        call 1
-        drop
         local.get 1
         i64.extend_i32_s
         call 4
@@ -47,9 +35,12 @@
         local.get 0
         return
     )
-    (func $3 (type 3) (param i32) (result i32)
+    (func $3 (type 3) (param) (result)
         (local i32)
-        local.get 1
+        call 2
+        local.set 0
+        i32.const 0
+        call 0
         return
     )
     (func $4 (type 4) (param i64) (result)
@@ -160,7 +151,7 @@
     (memory (;0;) 1000 1000)
     (export "memory" (memory 0))
     (export "main" (func 2))
-    (export "printf" (func 3))
+    (export "_start" (func 3))
     (export "print_i64" (func 4))
     (data (;0;) (i32.const 4) "\0c\00\00\00\01\00\00\00")
     (data (;1;) (i32.const 12) "    ")
@@ -196,6 +187,4 @@
     (data (;31;) (i32.const 192) "8   ")
     (data (;32;) (i32.const 196) "\cc\00\00\00\01\00\00\00")
     (data (;33;) (i32.const 204) "9   ")
-    (data (;34;) (i32.const 208) "\d8\00\00\00\03\00\00\00")
-    (data (;35;) (i32.const 216) "%d\n ")
 )
