@@ -389,6 +389,9 @@ int link_executable(const std::vector<std::string> &infiles,
         std::string cmd = CXX + " -o " + outfile + " ";
         std::string base_path = "\"" + runtime_library_dir + "\"";
         std::string runtime_lib = "lc_runtime";
+        // TODO: Remove the following when object file is passed
+        // Currently source file is passed
+        cmd += "-I" + LCompilers::LC::get_runtime_library_c_header_dir() + " ";
         for (auto &s : infiles) {
             cmd += s + " ";
         }
@@ -418,6 +421,9 @@ int link_executable(const std::vector<std::string> &infiles,
                 + kokkos_dir + "/lib/libkokkoscore.a -ldl";
         }
         std::string cmd = CXX + options + " -o " + outfile + " ";
+        // TODO: Remove the following when object file is passed
+        // Currently source file is passed
+        cmd += "-I" + LCompilers::LC::get_runtime_library_c_header_dir() + " ";
         for (auto &s : infiles) {
             cmd += s + " ";
         }
@@ -527,12 +533,12 @@ int main(int argc, const char **argv) {
         backend = string_to_backend[ArgBackend];
     }
 
+    std::string tmp_file;
     if (backend == Backend::wasm) {
-        outfile += "__generated__.wasm";
         status = compile_to_binary_wasm(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
     } else if (backend == Backend::c) {
-        outfile += "__generated__.c";
-        status = compile_to_c(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
+        tmp_file = outfile + "__generated__.c";
+        status = compile_to_c(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
     if (status != 0) {
@@ -540,7 +546,8 @@ int main(int argc, const char **argv) {
     }
 
     LCompilers::CompilerOptions co;
-    std::vector<std::string> infiles = {infile};
+    co.arg_o = ArgO;
+    std::vector<std::string> infiles = {tmp_file};
     status = link_executable(infiles, outfile, LCompilers::LC::get_runtime_library_dir(), backend, false, false, true, co);
     return status;
 }
