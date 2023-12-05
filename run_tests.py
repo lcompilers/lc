@@ -26,7 +26,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
     c = is_included("c")
     is_cumulative = is_included("cumulative")
     wat = is_included("wat")
-    extra_arg = test.get("extra_arg", "")
+    clang_extra_arg = test.get("extra_arg", "")
     disable_main = is_included("disable_main")
     pass_ = test.get("pass", None)
     optimization_passes = ["flip_sign", "div_to_mul", "fma", "sign_from_value",
@@ -34,6 +34,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
                            "dead_code_removal", "loop_vectorise", "print_list_tuple",
                            "class_constructor"]
 
+    extra_args = "--"
     if pass_ and (pass_ not in ["do_loops", "global_stmts"] and
                   pass_ not in optimization_passes):
         raise Exception(f"Unknown pass: {pass_}")
@@ -46,17 +47,17 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         run_test(
             filename,
             "ast",
-            "lc --ast-dump {infile} -o {outfile}" + f' -extra-arg="{extra_arg}"',
+            "lc --ast-dump {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
             filename,
-            update_reference)
+            update_reference, extra_args)
 
     if asr:
         run_test(
             filename,
             "asr",
-            "lc --asr-dump --no-color {infile} -o {outfile}" + f' -extra-arg="{extra_arg}"',
+            "lc --asr-dump --no-color {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
             filename,
-            update_reference)
+            update_reference, extra_args)
 
     if asr_json:
         run_test(
@@ -64,7 +65,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
             "asr_json",
             "lc --show-asr --json --no-color {infile} -o {outfile}",
             filename,
-            update_reference)
+            update_reference, extra_args)
 
     if pass_ is not None:
         cmd = "lc "
@@ -73,7 +74,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         cmd += "--pass=" + pass_ + \
             " --show-asr --no-color {infile} -o {outfile}"
         run_test(filename, "pass_{}".format(pass_), cmd,
-                 filename, update_reference)
+                 filename, update_reference, extra_args)
 
     if no_llvm:
         log.info(f"{filename} * llvm   SKIPPED as requested")
@@ -84,7 +85,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
                 "llvm",
                 "lc --no-color --show-llvm {infile} -o {outfile}",
                 filename,
-                update_reference)
+                update_reference, extra_args)
         if llvm_dbg:
             run_test(
                 filename,
@@ -92,22 +93,22 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
                 "lc --no-color --show-llvm -g --debug-with-line-column "
                     "{infile} -o {outfile}",
                 filename,
-                update_reference)
+                update_reference, extra_args)
 
     if cpp:
         run_test(filename, "cpp", "lc --no-color --show-cpp {infile}",
-                 filename, update_reference)
+                 filename, update_reference, extra_args)
 
     if c:
         if disable_main:
-            run_test(filename, "c", "lc --no-color --disable-main --show-c {infile}" + f' -extra-arg="{extra_arg}"',
-                 filename, update_reference)
+            run_test(filename, "c", "lc --no-color --disable-main --show-c {infile}" + f' -extra-arg="{clang_extra_arg}"',
+                 filename, update_reference, extra_args)
         else:
-            run_test(filename, "c", "lc --no-color --show-c {infile}" + f' -extra-arg="{extra_arg}"',
-                 filename, update_reference)
+            run_test(filename, "c", "lc --no-color --show-c {infile}" + f' -extra-arg="{clang_extra_arg}"',
+                 filename, update_reference, extra_args)
     if wat:
-        run_test(filename, "wat", "lc --no-color --show-wat {infile}" + f' -extra-arg="{extra_arg}"',
-                 filename, update_reference)
+        run_test(filename, "wat", "lc --no-color --show-wat {infile}" + f' -extra-arg="{clang_extra_arg}"',
+                 filename, update_reference, extra_args)
 
 if __name__ == "__main__":
     tester_main("LC", single_test)

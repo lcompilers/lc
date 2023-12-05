@@ -1,6 +1,0 @@
-Error while trying to load a compilation database:
-Could not auto-detect compilation database for file "tests/test.cpp"
-No compilation database found in $DIR/tests or any parent directory
-fixed-compilation-database: Error while opening fixed database: No such file or directory
-json-compilation-database: Error while opening JSON database: No such file or directory
-Running without flags.
