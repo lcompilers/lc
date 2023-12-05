@@ -14,11 +14,13 @@
 #include <libasr/assert.h>
 #include <libasr/pass/pass_manager.h>
 #include <libasr/pickle.h>
+#include <libasr/codegen/evaluator.h>
 #include <libasr/codegen/asr_to_c.h>
 #include <libasr/codegen/asr_to_wasm.h>
 #include <libasr/codegen/wasm_to_wat.h>
 
-#include "clang_ast_to_asr.h"
+#include <lc/clang_ast_to_asr.h>
+#include <lc/utils.h>
 
 #include <iostream>
 
@@ -59,7 +61,7 @@ static cl::opt<std::string>
     cl::desc("Select a backend (wasm, c)"), cl::cat(ClangCheckCategory));
 
 enum class Backend {
-    llvm, wasm, c
+    llvm, wasm, c, cpp, x86, fortran
 };
 
 std::map<std::string, Backend> string_to_backend = {
@@ -228,6 +230,256 @@ int compile_to_c(Allocator &al, const std::string &infile,
     return 0;
 }
 
+// infile is an object file
+// outfile will become the executable
+int link_executable(const std::vector<std::string> &infiles,
+    const std::string &outfile,
+    const std::string &runtime_library_dir, Backend backend,
+    bool static_executable, bool link_with_gcc, bool kokkos,
+    LCompilers::CompilerOptions &compiler_options)
+{
+    /*
+    The `gcc` line for dynamic linking that is constructed below:
+
+    gcc -o $outfile $infile \
+        -Lsrc/runtime -Wl,-rpath=src/runtime -llc_runtime
+
+    is equivalent to the following:
+
+    ld -o $outfile $infile \
+        -Lsrc/runtime -rpath=src/runtime -llc_runtime \
+        -dynamic-linker /lib64/ld-linux-x86-64.so.2  \
+        /usr/lib/x86_64-linux-gnu/Scrt1.o /usr/lib/x86_64-linux-gnu/libc.so
+
+    and this for static linking:
+
+    gcc -static -o $outfile $infile \
+        -Lsrc/runtime -Wl,-rpath=src/runtime -llc_runtime_static
+
+    is equivalent to:
+
+    ld -o $outfile $infile \
+        -Lsrc/runtime -rpath=src/runtime -llc_runtime_static \
+        /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o \
+        /usr/lib/x86_64-linux-gnu/libc.a \
+        /usr/lib/gcc/x86_64-linux-gnu/7/libgcc_eh.a \
+        /usr/lib/x86_64-linux-gnu/libc.a \
+        /usr/lib/gcc/x86_64-linux-gnu/7/libgcc.a \
+        /usr/lib/x86_64-linux-gnu/crtn.o
+
+    This was tested on Ubuntu 18.04.
+
+    The `gcc` and `ld` approaches are equivalent except:
+
+    1. The `gcc` command knows how to find and link the `libc` library,
+       while in `ld` we must do that manually
+    2. For dynamic linking, we must also specify the dynamic linker for `ld`
+
+    Notes:
+
+    * We can use `lld` to do the linking via the `ld` approach, so `ld` is
+      preferable if we can mitigate the issues 1. and 2.
+    * If we ship our own libc (such as musl), then we know how to find it
+      and link it, which mitigates the issue 1.
+    * If we link `musl` statically, then issue 2. does not apply.
+    * If we link `musl` dynamically, then we have to find the dynamic
+      linker (doable), which mitigates the issue 2.
+
+    One way to find the default dynamic linker is by:
+
+        $ readelf -e /bin/bash | grep ld-linux
+            [Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]
+
+    There are probably simpler ways.
+    */
+
+#ifdef HAVE_LFORTRAN_LLVM
+    std::string t = (compiler_options.target == "") ? LCompilers::LLVMEvaluator::get_default_target_triple() : compiler_options.target;
+#else
+    std::string t = (compiler_options.platform == LCompilers::Platform::Windows) ? "x86_64-pc-windows-msvc" : compiler_options.target;
+#endif
+    size_t dot_index = outfile.find_last_of(".");
+    std::string file_name = outfile.substr(0, dot_index);
+    std::string extra_runtime_linker_path;
+    if (!compiler_options.runtime_linker_paths.empty()) {
+        for (auto &s: compiler_options.runtime_linker_paths) {
+            extra_runtime_linker_path += " -Wl,-rpath," + s;
+        }
+    }
+    if (backend == Backend::llvm) {
+        std::string run_cmd = "", compile_cmd = "";
+        if (t == "x86_64-pc-windows-msvc") {
+            compile_cmd = "link /NOLOGO /OUT:" + outfile + " ";
+            for (auto &s : infiles) {
+                compile_cmd += s + " ";
+            }
+            compile_cmd += runtime_library_dir + "\\lc_runtime_static.lib";
+            run_cmd = outfile;
+        } else {
+            std::string CC;
+            std::string base_path = "\"" + runtime_library_dir + "\"";
+            std::string options;
+            std::string runtime_lib = "lc_runtime";
+
+            if (link_with_gcc) {
+                CC = "gcc";
+            } else {
+                CC = "clang";
+            }
+
+            char *env_CC = std::getenv("LFORTRAN_CC");
+            if (env_CC) CC = env_CC;
+
+            if (compiler_options.target != "" && !link_with_gcc) {
+                options = " -target " + compiler_options.target;
+            }
+
+            if (static_executable) {
+                if (compiler_options.platform != LCompilers::Platform::macOS_Intel
+                && compiler_options.platform != LCompilers::Platform::macOS_ARM) {
+                    options += " -static ";
+                }
+                runtime_lib = "lc_runtime_static";
+            }
+            compile_cmd = CC + options + " -o " + outfile + " ";
+            for (auto &s : infiles) {
+                compile_cmd += s + " ";
+            }
+            compile_cmd += + " -L"
+                + base_path + " -Wl,-rpath," + base_path;
+            if (!extra_runtime_linker_path.empty()) {
+                compile_cmd += extra_runtime_linker_path;
+            }
+            compile_cmd += " -l" + runtime_lib + " -lm";
+            run_cmd = "./" + outfile;
+        }
+        int err = system(compile_cmd.c_str());
+        if (err) {
+            std::cout << "The command '" + compile_cmd + "' failed." << std::endl;
+            return 10;
+        }
+
+#ifdef HAVE_RUNTIME_STACKTRACE
+        if (compiler_options.emit_debug_info) {
+            // TODO: Replace the following hardcoded part
+            std::string cmd = "";
+#ifdef HAVE_LFORTRAN_MACHO
+            cmd += "dsymutil " + file_name + ".out && llvm-dwarfdump --debug-line "
+                + file_name + ".out.dSYM > ";
+#else
+            cmd += "llvm-dwarfdump --debug-line " + file_name + ".out > ";
+#endif
+            std::string libasr_path = LCompilers::LC::get_runtime_library_c_header_dir() + "/../";
+            cmd += file_name + "_ldd.txt && (" + libasr_path + "dwarf_convert.py "
+                + file_name + "_ldd.txt " + file_name + "_lines.txt "
+                + file_name + "_lines.dat && " + libasr_path + "dat_convert.py "
+                + file_name + "_lines.dat)";
+            int status = system(cmd.c_str());
+            if ( status != 0 ) {
+                std::cerr << "Error in creating the files used to generate "
+                    "the debug information. This might be caused because either"
+                    " `llvm-dwarfdump` or `Python` are not available. "
+                    "Please activate the CONDA environment and compile again.\n";
+                return status;
+            }
+        }
+#endif
+    } else if (backend == Backend::c) {
+        std::string CXX = "gcc";
+        std::string cmd = CXX + " -o " + outfile + " ";
+        std::string base_path = "\"" + runtime_library_dir + "\"";
+        std::string runtime_lib = "lc_runtime";
+        for (auto &s : infiles) {
+            cmd += s + " ";
+        }
+        cmd += " -L" + base_path
+            + " -Wl,-rpath," + base_path;
+        if (!extra_runtime_linker_path.empty()) {
+            cmd += extra_runtime_linker_path;
+        }
+        cmd += " -l" + runtime_lib + " -lm";
+        int err = system(cmd.c_str());
+        if (err) {
+            std::cout << "The command '" + cmd + "' failed." << std::endl;
+            return 10;
+        }
+    } else if (backend == Backend::cpp) {
+        std::string CXX = "g++";
+        std::string options, post_options;
+        if (static_executable) {
+            options += " -static ";
+        }
+        if (compiler_options.openmp) {
+            options += " -fopenmp ";
+        }
+        if (kokkos) {
+            std::string kokkos_dir = LCompilers::LC::get_kokkos_dir();
+            post_options += kokkos_dir + "/lib/libkokkoscontainers.a "
+                + kokkos_dir + "/lib/libkokkoscore.a -ldl";
+        }
+        std::string cmd = CXX + options + " -o " + outfile + " ";
+        for (auto &s : infiles) {
+            cmd += s + " ";
+        }
+        cmd += " " + post_options + " -lm";
+        int err = system(cmd.c_str());
+        if (err) {
+            std::cout << "The command '" + cmd + "' failed." << std::endl;
+            return 10;
+        }
+    } else if (backend == Backend::x86) {
+        std::string cmd = "cp " + infiles[0] + " " + outfile;
+        int err = system(cmd.c_str());
+        if (err) {
+            std::cout << "The command '" + cmd + "' failed." << std::endl;
+            return 10;
+        }
+    } else if (backend == Backend::wasm) {
+        // do nothing
+    } else if (backend == Backend::fortran) {
+        std::string cmd = "gfortran -o " + outfile + " ";
+        std::string base_path = "\"" + runtime_library_dir + "\"";
+        std::string runtime_lib = "lc_runtime";
+        for (auto &s : infiles) {
+            cmd += s + " ";
+        }
+        cmd += " -L" + base_path
+            + " -Wl,-rpath," + base_path;
+        cmd += " -l" + runtime_lib + " -lm";
+        int err = system(cmd.c_str());
+        if (err) {
+            std::cout << "The command '" + cmd + "' failed." << std::endl;
+            return 10;
+        }
+    } else {
+        LCOMPILERS_ASSERT(false);
+        return 1;
+    }
+
+    if ( compiler_options.arg_o != "" ) {
+        return 0;
+    }
+
+    std::string run_cmd = "";
+    if (backend == Backend::wasm) {
+        // for node version less than 16, we need to also provide flag --experimental-wasm-bigint
+        run_cmd = "node --experimental-wasi-unstable-preview1 " + outfile + ".js";
+    } else if (t == "x86_64-pc-windows-msvc") {
+        run_cmd = outfile;
+    } else {
+        run_cmd = "./" + outfile;
+    }
+    int err = system(run_cmd.c_str());
+    if (err != 0) {
+        if (0 < err && err < 256) {
+            return err;
+        } else {
+            return LCompilers::LC::get_exit_status(err);
+        }
+    }
+    return 0;
+}
+
 int main(int argc, const char **argv) {
     auto ExpectedParser = CommonOptionsParser::create(argc, argv, ClangCheckCategory);
     if (!ExpectedParser) {
@@ -283,5 +535,12 @@ int main(int argc, const char **argv) {
         status = compile_to_c(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
+    if (status != 0) {
+        return status;
+    }
+
+    LCompilers::CompilerOptions co;
+    std::vector<std::string> infiles = {infile};
+    status = link_executable(infiles, outfile, LCompilers::LC::get_runtime_library_dir(), backend, false, false, true, co);
     return status;
 }
