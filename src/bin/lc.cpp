@@ -69,6 +69,31 @@ std::map<std::string, Backend> string_to_backend = {
     {"c", Backend::c},
 };
 
+std::string remove_extension(const std::string& filename) {
+    size_t lastdot = filename.find_last_of(".");
+    if (lastdot == std::string::npos) return filename;
+    return filename.substr(0, lastdot);
+}
+
+std::string remove_path(const std::string& filename) {
+    size_t lastslash = filename.find_last_of("/");
+    if (lastslash == std::string::npos) return filename;
+    return filename.substr(lastslash+1);
+}
+
+std::string construct_outfile(std::string &arg_file, std::string &ArgO) {
+    std::string outfile;
+    std::string basename;
+    basename = remove_extension(arg_file);
+    basename = remove_path(basename);
+    if (ArgO.size() > 0) {
+        outfile = ArgO;
+    } else {
+        outfile = basename + ".out";
+    }
+    return outfile;
+}
+
 class ClangCheckActionFactory {
 
 public:
@@ -207,6 +232,9 @@ int main(int argc, const char **argv) {
     } else if (ShowC) {
         return emit_c(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
+
+    // compile to binary
+    std::string outfile = construct_outfile(infile, ArgO);
 
     return status;
 }
