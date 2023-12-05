@@ -100,13 +100,13 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
 
     if c:
         if disable_main:
-            run_test(filename, "c", "lc --no-color --disable-main --show-c {infile}",
+            run_test(filename, "c", "lc --no-color --disable-main --show-c {infile}" + f' -extra-arg="{extra_arg}"',
                  filename, update_reference)
         else:
-            run_test(filename, "c", "lc --no-color --show-c {infile}",
+            run_test(filename, "c", "lc --no-color --show-c {infile}" + f' -extra-arg="{extra_arg}"',
                  filename, update_reference)
     if wat:
-        run_test(filename, "wat", "lc --no-color --show-wat {infile}",
+        run_test(filename, "wat", "lc --no-color --show-wat {infile}" + f' -extra-arg="{extra_arg}"',
                  filename, update_reference)
 
 if __name__ == "__main__":
