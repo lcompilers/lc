@@ -9,6 +9,9 @@ filename = "test.cpp"
 asr = true
 wat = true
 c = true
+cpp = true
+llvm = true
+fortran = true
 
 [[test]]
 filename = "expr2.c"
@@ -16,3 +19,6 @@ extra_arg = "-Isrc/runtime/include"
 asr = true
 wat = true
 c = true
+cpp = true
+llvm = true
+fortran = true
