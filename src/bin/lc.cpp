@@ -462,7 +462,10 @@ int link_executable(const std::vector<std::string> &infiles,
             std::string options;
             std::string runtime_lib = "lc_runtime";
 
-            if (link_with_gcc) {
+            bool is_macos = (compiler_options.platform == LCompilers::Platform::macOS_Intel ||
+                compiler_options.platform == LCompilers::Platform::macOS_ARM);
+
+            if (link_with_gcc || is_macos) {
                 CC = "gcc";
             } else {
                 CC = "clang";
