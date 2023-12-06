@@ -16,6 +16,9 @@
 #include <libasr/pickle.h>
 #include <libasr/codegen/evaluator.h>
 #include <libasr/codegen/asr_to_c.h>
+#include <libasr/codegen/asr_to_cpp.h>
+#include <libasr/codegen/asr_to_fortran.h>
+#include <libasr/codegen/asr_to_llvm.h>
 #include <libasr/codegen/asr_to_wasm.h>
 #include <libasr/codegen/wasm_to_wat.h>
 
@@ -56,9 +59,18 @@ static cl::opt<bool>
 static cl::opt<bool>
     ShowC("show-c",
     cl::desc("Show C translation source for the given file and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowCPP("show-cpp",
+    cl::desc("Show C++ translation source for the given file and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowFortran("show-fortran",
+    cl::desc("Show Fortran translation source for the given file and exit"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowLLVM("show-llvm",
+    cl::desc("Show LLVM IR for the given file and exit"), cl::cat(ClangCheckCategory));
 static cl::opt<std::string>
     ArgBackend("backend",
-    cl::desc("Select a backend (wasm, c)"), cl::cat(ClangCheckCategory));
+    cl::desc("Select a backend (llvm, wasm, c, cpp, fortran)"), cl::cat(ClangCheckCategory));
 
 enum class Backend {
     llvm, wasm, c, cpp, x86, fortran
@@ -69,6 +81,8 @@ std::map<std::string, Backend> string_to_backend = {
     {"llvm", Backend::llvm},
     {"wasm", Backend::wasm},
     {"c", Backend::c},
+    {"cpp", Backend::cpp},
+    {"fortran", Backend::fortran},
 };
 
 std::string remove_extension(const std::string& filename) {
@@ -196,6 +210,65 @@ int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_
     return 0;
 }
 
+int emit_cpp(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    // Apply ASR passes
+    LCompilers::PassManager pass_manager;
+    pass_manager.use_default_passes(true);
+    pass_manager.apply_passes(al, asr, compiler_options.po, diagnostics);
+
+    auto res = LCompilers::asr_to_cpp(al, *asr, diagnostics, compiler_options, 0);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    std::cout << res.result;
+    return 0;
+}
+
+int emit_fortran(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    auto res = LCompilers::asr_to_fortran(*asr, diagnostics, false, 4);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    std::cout << res.result;
+    return 0;
+}
+
+int emit_llvm(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    LCompilers::PassManager pass_manager;
+    LCompilers::LLVMEvaluator e(compiler_options.target);
+
+    std::string run_fn = "__lfortran_evaluate_0";
+
+    std::unique_ptr<LCompilers::LLVMModule> m;
+    LCompilers::Result<std::unique_ptr<LCompilers::LLVMModule>> res
+        = asr_to_llvm(*asr, diagnostics, e.get_context(), al,
+            pass_manager, compiler_options, run_fn, infile);
+    if (res.ok) {
+        m = std::move(res.result);
+    } else {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    std::cerr << diagnostics.render(lm, compiler_options);
+
+    if (compiler_options.po.fast) {
+        e.opt(*m->m_m);
+    }
+
+    std::cout << m->str();
+    return 0;
+}
+
 int compile_to_binary_wasm(
     Allocator &al, const std::string &infile,
     const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
@@ -227,6 +300,74 @@ int compile_to_c(Allocator &al, const std::string &infile,
     fp = fopen(outfile.c_str(), "w");
     fputs(res.result.c_str(), fp);
     fclose(fp);
+    return 0;
+}
+
+int compile_to_cpp(Allocator &al, const std::string &infile,
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    // Apply ASR passes
+    LCompilers::PassManager pass_manager;
+    pass_manager.use_default_passes(true);
+    pass_manager.apply_passes(al, asr, compiler_options.po, diagnostics);
+
+    auto res = LCompilers::asr_to_cpp(al, *asr, diagnostics, compiler_options, 0);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    FILE *fp;
+    fp = fopen(outfile.c_str(), "w");
+    fputs(res.result.c_str(), fp);
+    fclose(fp);
+    return 0;
+}
+
+int compile_to_fortran(Allocator &al, const std::string &infile,
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    auto res = LCompilers::asr_to_fortran(*asr, diagnostics, false, 4);
+    std::cerr << diagnostics.render(lm, compiler_options);
+    if (!res.ok) {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    FILE *fp;
+    fp = fopen(outfile.c_str(), "w");
+    fputs(res.result.c_str(), fp);
+    fclose(fp);
+    return 0;
+}
+
+int compile_to_binary_object(Allocator &al, const std::string &infile,
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    DeclareLCompilersUtilVars;
+
+    LCompilers::PassManager pass_manager;
+    LCompilers::LLVMEvaluator e(compiler_options.target);
+
+    std::string run_fn = "__lfortran_evaluate_0";
+
+    std::unique_ptr<LCompilers::LLVMModule> m;
+    LCompilers::Result<std::unique_ptr<LCompilers::LLVMModule>> res
+        = asr_to_llvm(*asr, diagnostics, e.get_context(), al,
+            pass_manager, compiler_options, run_fn, infile);
+    if (res.ok) {
+        m = std::move(res.result);
+    } else {
+        LCOMPILERS_ASSERT(diagnostics.has_error())
+        return 1;
+    }
+    std::cerr << diagnostics.render(lm, compiler_options);
+
+    if (compiler_options.po.fast) {
+        e.opt(*m->m_m);
+    }
+
+    e.save_object_file(*(m->m_m), outfile);
     return 0;
 }
 
@@ -389,6 +530,9 @@ int link_executable(const std::vector<std::string> &infiles,
         std::string cmd = CXX + " -o " + outfile + " ";
         std::string base_path = "\"" + runtime_library_dir + "\"";
         std::string runtime_lib = "lc_runtime";
+        // TODO: Remove the following when object file is passed
+        // Currently source file is passed
+        cmd += "-I" + LCompilers::LC::get_runtime_library_c_header_dir() + " ";
         for (auto &s : infiles) {
             cmd += s + " ";
         }
@@ -418,6 +562,9 @@ int link_executable(const std::vector<std::string> &infiles,
                 + kokkos_dir + "/lib/libkokkoscore.a -ldl";
         }
         std::string cmd = CXX + options + " -o " + outfile + " ";
+        // TODO: Remove the following when object file is passed
+        // Currently source file is passed
+        cmd += "-I" + LCompilers::LC::get_runtime_library_c_header_dir() + " ";
         for (auto &s : infiles) {
             cmd += s + " ";
         }
@@ -517,6 +664,12 @@ int main(int argc, const char **argv) {
         return emit_wat(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
     } else if (ShowC) {
         return emit_c(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (ShowCPP) {
+        return emit_cpp(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (ShowFortran) {
+        return emit_fortran(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (ShowLLVM) {
+        return emit_llvm(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
     // compile to binary
@@ -527,12 +680,21 @@ int main(int argc, const char **argv) {
         backend = string_to_backend[ArgBackend];
     }
 
+    std::string tmp_file;
     if (backend == Backend::wasm) {
-        outfile += "__generated__.wasm";
         status = compile_to_binary_wasm(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
     } else if (backend == Backend::c) {
-        outfile += "__generated__.c";
-        status = compile_to_c(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
+        tmp_file = outfile + "__generated__.c";
+        status = compile_to_c(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (backend == Backend::cpp) {
+        tmp_file = outfile + "__generated__.cpp";
+        status = compile_to_cpp(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (backend == Backend::fortran) {
+        tmp_file = outfile + "__generated__.f90";
+        status = compile_to_fortran(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
+    } else if (backend == Backend::llvm) {
+        tmp_file = outfile + "__generated__.o";
+        status = compile_to_binary_object(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
     if (status != 0) {
@@ -540,7 +702,8 @@ int main(int argc, const char **argv) {
     }
 
     LCompilers::CompilerOptions co;
-    std::vector<std::string> infiles = {infile};
+    co.arg_o = ArgO;
+    std::vector<std::string> infiles = {tmp_file};
     status = link_executable(infiles, outfile, LCompilers::LC::get_runtime_library_dir(), backend, false, false, true, co);
     return status;
 }

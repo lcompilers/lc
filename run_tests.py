@@ -24,6 +24,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
     llvm_dbg = is_included("llvm_dbg")
     cpp = is_included("cpp")
     c = is_included("c")
+    fortran = is_included("fortran")
     is_cumulative = is_included("cumulative")
     wat = is_included("wat")
     clang_extra_arg = test.get("extra_arg", "")
@@ -63,7 +64,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         run_test(
             filename,
             "asr_json",
-            "lc --show-asr --json --no-color {infile} -o {outfile}",
+            "lc --show-asr --json --no-color {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
             filename,
             update_reference, extra_args)
 
@@ -72,7 +73,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         if is_cumulative:
             cmd += "--cumulative "
         cmd += "--pass=" + pass_ + \
-            " --show-asr --no-color {infile} -o {outfile}"
+            " --show-asr --no-color {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"'
         run_test(filename, "pass_{}".format(pass_), cmd,
                  filename, update_reference, extra_args)
 
@@ -83,7 +84,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
             run_test(
                 filename,
                 "llvm",
-                "lc --no-color --show-llvm {infile} -o {outfile}",
+                "lc --no-color --show-llvm {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
                 filename,
                 update_reference, extra_args)
         if llvm_dbg:
@@ -91,12 +92,12 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
                 filename,
                 "llvm_dbg",
                 "lc --no-color --show-llvm -g --debug-with-line-column "
-                    "{infile} -o {outfile}",
+                    "{infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
                 filename,
                 update_reference, extra_args)
 
     if cpp:
-        run_test(filename, "cpp", "lc --no-color --show-cpp {infile}",
+        run_test(filename, "cpp", "lc --no-color --show-cpp {infile}" + f' -extra-arg="{clang_extra_arg}"',
                  filename, update_reference, extra_args)
 
     if c:
@@ -108,6 +109,9 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
                  filename, update_reference, extra_args)
     if wat:
         run_test(filename, "wat", "lc --no-color --show-wat {infile}" + f' -extra-arg="{clang_extra_arg}"',
+                 filename, update_reference, extra_args)
+    if fortran:
+        run_test(filename, "fortran", "lc --no-color --show-fortran {infile}" + f' -extra-arg="{clang_extra_arg}"',
                  filename, update_reference, extra_args)
 
 if __name__ == "__main__":

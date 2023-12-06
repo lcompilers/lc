@@ -1,0 +1,7 @@
+integer(4) function f(x) result(__return_var)
+    integer(4) :: result
+    integer(4), intent(inout) :: x
+    result = x/42
+    __return_var = result
+    return
+end function f

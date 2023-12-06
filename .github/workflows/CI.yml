@@ -61,3 +61,5 @@ jobs:
             ./src/bin/lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" --
 
             ./src/bin/lc examples/expr2.c --backend wasm --extra-arg="-Isrc/runtime/include" --
+
+            ./src/bin/lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" --

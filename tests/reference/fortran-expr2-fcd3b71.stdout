@@ -1,0 +1,12 @@
+integer(4) function main() result(__return_var)
+    integer(4) :: x
+    x = (2 + 3)*5
+    print *, x
+    __return_var = 0
+    return
+end function main
+program main_program
+implicit none
+integer(4) :: exit_code
+exit_code = main()
+end program main_program
