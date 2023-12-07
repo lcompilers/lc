@@ -55,18 +55,6 @@ jobs:
         run: |
             which clang
 
-            lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" --
-
-            lc examples/expr2.c --backend wasm --extra-arg="-Isrc/runtime/include" --
-
-            lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" --
-
-            lc tests/array_01.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
-
-            lc tests/array_02.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
-
-            lc tests/array_02.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
-
             lc tests/array_03.cpp --backend=llvm --extra-arg="-I$CONDA_PREFIX/include" --
 
             # Test generating object files
@@ -77,3 +65,10 @@ jobs:
             # Test including iostream and span headers
             lc tests/span_01.cpp --ast-dump --ast-dump-file="tests/span_01.ast" --extra-arg="-std=c++20" --
             cat tests/span_01.ast
+
+      - name: Test3 (Linux / macOS)
+        shell: bash -l -e {0}
+        if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
+        run: |
+            ./integration_tests/run_tests.py -b gcc llvm wasm c
+            ./integration_tests/run_tests.py -b gcc llvm wasm c -f
