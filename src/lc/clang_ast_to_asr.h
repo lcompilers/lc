@@ -25,6 +25,7 @@
 #include "clang/Tooling/Tooling.h"
 
 #include <libasr/pickle.h>
+#include <libasr/asr_utils.h>
 
 #include <iostream>
 
@@ -141,6 +142,29 @@ public:
         return true;
     }
 
+    ASR::ttype_t* flatten_Array(ASR::ttype_t* array) {
+        if( !ASRUtils::is_array(array) ) {
+            return array;
+        }
+        ASR::Array_t* array_t = ASR::down_cast<ASR::Array_t>(array);
+        ASR::ttype_t* m_type_flattened = flatten_Array(array_t->m_type);
+        if( !ASR::is_a<ASR::Array_t>(*m_type_flattened) ) {
+            return array;
+        }
+
+        ASR::Array_t* array_t_flattened = ASR::down_cast<ASR::Array_t>(m_type_flattened);
+        ASR::dimension_t row = array_t->m_dims[0];
+        Vec<ASR::dimension_t> new_dims; new_dims.reserve(al, array_t->n_dims + array_t_flattened->n_dims);
+        new_dims.push_back(al, row);
+        for( size_t i = 0; i < array_t_flattened->n_dims; i++ ) {
+            new_dims.push_back(al, array_t_flattened->m_dims[i]);
+        }
+        array_t->m_type = array_t_flattened->m_type;
+        array_t->m_dims = new_dims.p;
+        array_t->n_dims = new_dims.size();
+        return array;
+    }
+
     ASR::ttype_t* ClangTypeToASRType(const clang::QualType& qual_type) {
         const clang::SplitQualType& split_qual_type = qual_type.split();
         const clang::Type* clang_type = split_qual_type.asPair().first;
@@ -156,6 +180,23 @@ public:
             if( !ASRUtils::is_character(*type) ) {
                 type = ASRUtils::TYPE(ASR::make_Pointer_t(al, l, type));
             }
+        } else if( clang_type->isConstantArrayType() ) {
+            const clang::ArrayType* array_type = clang_type->getAsArrayTypeUnsafe();
+            const clang::ConstantArrayType* fixed_size_array_type =
+                reinterpret_cast<const clang::ConstantArrayType*>(array_type);
+            type = ClangTypeToASRType(array_type->getElementType());
+            llvm::APInt ap_int = fixed_size_array_type->getSize();
+            uint64_t size = ap_int.getZExtValue();
+            Vec<ASR::dimension_t> vec; vec.reserve(al, 1);
+            ASR::dimension_t dim;
+            dim.loc = l; dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(
+                al, l, size, ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+            dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
+                ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+            vec.push_back(al, dim);
+            type = ASRUtils::TYPE(ASR::make_Array_t(al, l, type, vec.p, vec.size(),
+                ASR::array_physical_typeType::FixedSizeArray));
+            type = flatten_Array(type);
         } else {
             throw std::runtime_error("clang::QualType not yet supported.");
         }
@@ -276,6 +317,29 @@ public:
             tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
             is_stmt_created = true;
         }
+        return true;
+    }
+
+    bool TraverseInitListExpr(clang::InitListExpr* x) {
+        Vec<ASR::expr_t*> init_exprs;
+        init_exprs.reserve(al, x->getNumInits());
+        clang::Expr** clang_inits = x->getInits();
+        for( size_t i = 0; i < x->getNumInits(); i++ ) {
+            TraverseStmt(clang_inits[i]);
+            init_exprs.push_back(al, ASRUtils::EXPR(tmp));
+        }
+        ASR::ttype_t* type = ASRUtils::expr_type(init_exprs[init_exprs.size() - 1]);
+        Vec<ASR::dimension_t> dims; dims.reserve(al, 1);
+        ASR::dimension_t dim; dim.loc = Lloc(x);
+        dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, Lloc(x),
+            x->getNumInits(), ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
+        dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, Lloc(x),
+            0, ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
+        dims.push_back(al, dim);
+        type = ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x),
+            type, dims.p, dims.size(), ASR::array_physical_typeType::FixedSizeArray));
+        tmp = ASR::make_ArrayConstant_t(al, Lloc(x),
+            init_exprs.p, init_exprs.size(), type, ASR::arraystorageType::RowMajor);
         return true;
     }
 
