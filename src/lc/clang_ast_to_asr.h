@@ -320,6 +320,41 @@ public:
         return true;
     }
 
+    void flatten_ArrayConstant(ASR::expr_t* array_constant) {
+        if( !ASRUtils::is_array(ASRUtils::expr_type(array_constant)) ) {
+            return ;
+        }
+
+        LCOMPILERS_ASSERT(ASR::is_a<ASR::ArrayConstant_t>(array_constant));
+        ASR::ArrayConstant_t* array_constant_t = ASR::down_cast<ASR::ArrayConstant_t>(array_constant);
+        Vec<ASR::expr_t*> new_elements; new_elements.reserve(al, array_constant_t->n_args);
+        for( size_t i = 0; i < array_constant_t->n_args; i++ ) {
+            flatten_ArrayConstant(array_constant_t->m_args[i]);
+            if( ASR::is_a<ASR::ArrayConstant_t>(*array_constant_t->m_args[i]) ) {
+                ASR::ArrayConstant_t* aci = ASR::down_cast<ASR::ArrayConstant_t>(array_constant_t->m_args[i]);
+                for( size_t j = 0; j < aci->n_args; j++ ) {
+                    new_elements.push_back(al, aci->m_args[j]);
+                }
+            } else {
+                new_elements.push_back(al, array_constant_t->m_args[i]);
+            }
+        }
+        array_constant_t->m_args = new_elements.p;
+        array_constant_t->n_args = new_elements.size();
+        Vec<ASR::dimension_t> new_dims; new_dims.reserve(al, 1);
+        const Location& loc = array_constant->base.loc;
+        ASR::dimension_t dim; dim.loc = loc;
+        dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, loc,
+            new_elements.size(), ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4))));
+        dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, loc,
+            0, ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4))));
+        new_dims.push_back(al, dim);
+        ASR::ttype_t* new_type = ASRUtils::TYPE(ASR::make_Array_t(al, loc,
+            ASRUtils::type_get_past_array(flatten_Array(array_constant_t->m_type)),
+            new_dims.p, new_dims.size(), ASR::array_physical_typeType::FixedSizeArray));
+        array_constant_t->m_type = new_type;
+    }
+
     bool TraverseInitListExpr(clang::InitListExpr* x) {
         Vec<ASR::expr_t*> init_exprs;
         init_exprs.reserve(al, x->getNumInits());
@@ -338,8 +373,10 @@ public:
         dims.push_back(al, dim);
         type = ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x),
             type, dims.p, dims.size(), ASR::array_physical_typeType::FixedSizeArray));
-        tmp = ASR::make_ArrayConstant_t(al, Lloc(x),
-            init_exprs.p, init_exprs.size(), type, ASR::arraystorageType::RowMajor);
+        ASR::expr_t* array_constant = ASRUtils::EXPR(ASR::make_ArrayConstant_t(al, Lloc(x),
+            init_exprs.p, init_exprs.size(), type, ASR::arraystorageType::RowMajor));
+        flatten_ArrayConstant(array_constant);
+        tmp = (ASR::asr_t*) array_constant;
         return true;
     }
 
