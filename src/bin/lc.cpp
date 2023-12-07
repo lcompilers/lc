@@ -245,6 +245,7 @@ int emit_llvm(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUn
     DeclareLCompilersUtilVars;
 
     LCompilers::PassManager pass_manager;
+    pass_manager.use_default_passes();
     LCompilers::LLVMEvaluator e(compiler_options.target);
 
     std::string run_fn = "__lfortran_evaluate_0";
