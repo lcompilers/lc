@@ -348,6 +348,7 @@ int compile_to_binary_object(Allocator &al, const std::string &infile,
     DeclareLCompilersUtilVars;
 
     LCompilers::PassManager pass_manager;
+    pass_manager.use_default_passes();
     LCompilers::LLVMEvaluator e(compiler_options.target);
 
     std::string run_fn = "__lfortran_evaluate_0";
