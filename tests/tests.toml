@@ -22,3 +22,8 @@ c = true
 cpp = true
 llvm = true
 fortran = true
+
+[[test]]
+filename = "array_01.cpp"
+extra_arg = "-Isrc/runtime/include"
+asr = true
