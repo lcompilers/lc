@@ -509,10 +509,31 @@ public:
         return true;
     }
 
+    ASR::expr_t* flatten_ArrayItem(ASR::expr_t* expr) {
+        if( !ASR::is_a<ASR::ArrayItem_t>(*expr) ) {
+            return expr;
+        }
+
+        ASR::ArrayItem_t* array_item_t = ASR::down_cast<ASR::ArrayItem_t>(expr);
+        if( !ASR::is_a<ASR::ArrayItem_t>(*array_item_t->m_v) ) {
+            return expr;
+        }
+
+        ASR::expr_t* flattened_array_item_expr = flatten_ArrayItem(array_item_t->m_v);
+        ASR::ArrayItem_t* flattened_array_item = ASR::down_cast<ASR::ArrayItem_t>(flattened_array_item_expr);
+        array_item_t->m_v = flattened_array_item->m_v;
+        Vec<ASR::array_index_t> indices; indices.from_pointer_n_copy(
+            al, flattened_array_item->m_args, flattened_array_item->n_args);
+        indices.push_back(al, array_item_t->m_args[0]);
+        array_item_t->m_args = indices.p;
+        array_item_t->n_args = indices.size();
+        return expr;
+    }
+
     bool TraverseArraySubscriptExpr(clang::ArraySubscriptExpr* x) {
         clang::Expr* clang_array = x->getBase();
         TraverseStmt(clang_array);
-        ASR::expr_t* array = ASRUtils::EXPR(tmp);
+        ASR::expr_t* array = flatten_ArrayItem(ASRUtils::EXPR(tmp));
         clang::Expr* clang_index = x->getIdx();
         TraverseStmt(clang_index);
         ASR::expr_t* index = ASRUtils::EXPR(tmp);
@@ -520,8 +541,10 @@ public:
         ASR::array_index_t array_index; array_index.loc = index->base.loc;
         array_index.m_left = nullptr; array_index.m_right = index; array_index.m_step = nullptr;
         indices.push_back(al, array_index);
-        tmp = ASR::make_ArrayItem_t(al, Lloc(x), array, indices.p, indices.size(),
-            ASRUtils::extract_type(ASRUtils::expr_type(array)), ASR::arraystorageType::RowMajor, nullptr);
+        ASR::expr_t* array_item = ASRUtils::EXPR(ASR::make_ArrayItem_t(al, Lloc(x), array, indices.p, indices.size(),
+            ASRUtils::extract_type(ASRUtils::expr_type(array)), ASR::arraystorageType::RowMajor, nullptr));
+        array_item = flatten_ArrayItem(array_item);
+        tmp = (ASR::asr_t*) array_item;
         return true;
     }
 
