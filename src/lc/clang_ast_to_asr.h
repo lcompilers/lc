@@ -25,6 +25,7 @@
 #include "clang/Tooling/Tooling.h"
 
 #include <libasr/pickle.h>
+#include <libasr/asr_utils.h>
 
 #include <iostream>
 
@@ -141,6 +142,29 @@ public:
         return true;
     }
 
+    ASR::ttype_t* flatten_Array(ASR::ttype_t* array) {
+        if( !ASRUtils::is_array(array) ) {
+            return array;
+        }
+        ASR::Array_t* array_t = ASR::down_cast<ASR::Array_t>(array);
+        ASR::ttype_t* m_type_flattened = flatten_Array(array_t->m_type);
+        if( !ASR::is_a<ASR::Array_t>(*m_type_flattened) ) {
+            return array;
+        }
+
+        ASR::Array_t* array_t_flattened = ASR::down_cast<ASR::Array_t>(m_type_flattened);
+        ASR::dimension_t row = array_t->m_dims[0];
+        Vec<ASR::dimension_t> new_dims; new_dims.reserve(al, array_t->n_dims + array_t_flattened->n_dims);
+        new_dims.push_back(al, row);
+        for( size_t i = 0; i < array_t_flattened->n_dims; i++ ) {
+            new_dims.push_back(al, array_t_flattened->m_dims[i]);
+        }
+        array_t->m_type = array_t_flattened->m_type;
+        array_t->m_dims = new_dims.p;
+        array_t->n_dims = new_dims.size();
+        return array;
+    }
+
     ASR::ttype_t* ClangTypeToASRType(const clang::QualType& qual_type) {
         const clang::SplitQualType& split_qual_type = qual_type.split();
         const clang::Type* clang_type = split_qual_type.asPair().first;
@@ -156,6 +180,23 @@ public:
             if( !ASRUtils::is_character(*type) ) {
                 type = ASRUtils::TYPE(ASR::make_Pointer_t(al, l, type));
             }
+        } else if( clang_type->isConstantArrayType() ) {
+            const clang::ArrayType* array_type = clang_type->getAsArrayTypeUnsafe();
+            const clang::ConstantArrayType* fixed_size_array_type =
+                reinterpret_cast<const clang::ConstantArrayType*>(array_type);
+            type = ClangTypeToASRType(array_type->getElementType());
+            llvm::APInt ap_int = fixed_size_array_type->getSize();
+            uint64_t size = ap_int.getZExtValue();
+            Vec<ASR::dimension_t> vec; vec.reserve(al, 1);
+            ASR::dimension_t dim;
+            dim.loc = l; dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(
+                al, l, size, ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+            dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
+                ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+            vec.push_back(al, dim);
+            type = ASRUtils::TYPE(ASR::make_Array_t(al, l, type, vec.p, vec.size(),
+                ASR::array_physical_typeType::FixedSizeArray));
+            type = flatten_Array(type);
         } else {
             throw std::runtime_error("clang::QualType not yet supported.");
         }
@@ -279,6 +320,78 @@ public:
         return true;
     }
 
+    void flatten_ArrayConstant(ASR::expr_t* array_constant) {
+        if( !ASRUtils::is_array(ASRUtils::expr_type(array_constant)) ) {
+            return ;
+        }
+
+        LCOMPILERS_ASSERT(ASR::is_a<ASR::ArrayConstant_t>(array_constant));
+        ASR::ArrayConstant_t* array_constant_t = ASR::down_cast<ASR::ArrayConstant_t>(array_constant);
+        Vec<ASR::expr_t*> new_elements; new_elements.reserve(al, array_constant_t->n_args);
+        for( size_t i = 0; i < array_constant_t->n_args; i++ ) {
+            flatten_ArrayConstant(array_constant_t->m_args[i]);
+            if( ASR::is_a<ASR::ArrayConstant_t>(*array_constant_t->m_args[i]) ) {
+                ASR::ArrayConstant_t* aci = ASR::down_cast<ASR::ArrayConstant_t>(array_constant_t->m_args[i]);
+                for( size_t j = 0; j < aci->n_args; j++ ) {
+                    new_elements.push_back(al, aci->m_args[j]);
+                }
+            } else {
+                new_elements.push_back(al, array_constant_t->m_args[i]);
+            }
+        }
+        array_constant_t->m_args = new_elements.p;
+        array_constant_t->n_args = new_elements.size();
+        Vec<ASR::dimension_t> new_dims; new_dims.reserve(al, 1);
+        const Location& loc = array_constant->base.loc;
+        ASR::dimension_t dim; dim.loc = loc;
+        dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, loc,
+            new_elements.size(), ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4))));
+        dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, loc,
+            0, ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4))));
+        new_dims.push_back(al, dim);
+        ASR::ttype_t* new_type = ASRUtils::TYPE(ASR::make_Array_t(al, loc,
+            ASRUtils::type_get_past_array(flatten_Array(array_constant_t->m_type)),
+            new_dims.p, new_dims.size(), ASR::array_physical_typeType::FixedSizeArray));
+        array_constant_t->m_type = new_type;
+    }
+
+    bool TraverseInitListExpr(clang::InitListExpr* x) {
+        Vec<ASR::expr_t*> init_exprs;
+        init_exprs.reserve(al, x->getNumInits());
+        clang::Expr** clang_inits = x->getInits();
+        for( size_t i = 0; i < x->getNumInits(); i++ ) {
+            TraverseStmt(clang_inits[i]);
+            init_exprs.push_back(al, ASRUtils::EXPR(tmp));
+        }
+        ASR::ttype_t* type = ASRUtils::expr_type(init_exprs[init_exprs.size() - 1]);
+        Vec<ASR::dimension_t> dims; dims.reserve(al, 1);
+        ASR::dimension_t dim; dim.loc = Lloc(x);
+        dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, Lloc(x),
+            x->getNumInits(), ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
+        dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, Lloc(x),
+            0, ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
+        dims.push_back(al, dim);
+        type = ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x),
+            type, dims.p, dims.size(), ASR::array_physical_typeType::FixedSizeArray));
+        ASR::expr_t* array_constant = ASRUtils::EXPR(ASR::make_ArrayConstant_t(al, Lloc(x),
+            init_exprs.p, init_exprs.size(), type, ASR::arraystorageType::RowMajor));
+        flatten_ArrayConstant(array_constant);
+        tmp = (ASR::asr_t*) array_constant;
+        return true;
+    }
+
+    void CreateBinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
+        ASR::binopType binop_type, const Location& loc) {
+        if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
+            ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
+                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+        } else {
+            throw SemanticError("Only integer type is supported so "
+                "far for binary operator", loc);
+        }
+    }
+
     bool TraverseBinaryOperator(clang::BinaryOperator *x) {
         clang::BinaryOperatorKind op = x->getOpcode();
         TraverseStmt(x->getLHS());
@@ -318,18 +431,26 @@ public:
                     is_cmpop = true;
                     break;
                 }
+                case clang::BO_LT: {
+                    cmpop_type = ASR::cmpopType::Lt;
+                    is_cmpop = true;
+                    break;
+                }
                 default: {
                     throw std::runtime_error("BinaryOperator not supported " + std::to_string(op));
                     break;
                 }
             }
             if( is_binop ) {
+                CreateBinOp(x_lhs, x_rhs, binop_type, Lloc(x));
+            } else if( is_cmpop ) {
                 if( ASRUtils::is_integer(*ASRUtils::expr_type(x_lhs)) &&
                     ASRUtils::is_integer(*ASRUtils::expr_type(x_rhs)) ) {
-                    tmp = ASR::make_IntegerBinOp_t(al, Lloc(x), x_lhs,
-                        binop_type, x_rhs, ASRUtils::expr_type(x_lhs), nullptr);
+                    tmp = ASR::make_IntegerCompare_t(al, Lloc(x), x_lhs,
+                        cmpop_type, x_rhs, ASRUtils::expr_type(x_lhs), nullptr);
                 } else {
-                    throw std::runtime_error("Only integer type is supported so far");
+                    throw std::runtime_error("Only integer type is supported so "
+                                             "far for comparison operator");
                 }
             } else {
                 throw std::runtime_error("Only binary operators supported so far");
@@ -384,6 +505,106 @@ public:
         tmp = ASR::make_Assignment_t(al, Lloc(x), return_var, ASRUtils::EXPR(tmp), nullptr);
         current_body->push_back(al, ASRUtils::STMT(tmp));
         tmp = ASR::make_Return_t(al, Lloc(x));
+        is_stmt_created = true;
+        return true;
+    }
+
+    ASR::expr_t* flatten_ArrayItem(ASR::expr_t* expr) {
+        if( !ASR::is_a<ASR::ArrayItem_t>(*expr) ) {
+            return expr;
+        }
+
+        ASR::ArrayItem_t* array_item_t = ASR::down_cast<ASR::ArrayItem_t>(expr);
+        if( !ASR::is_a<ASR::ArrayItem_t>(*array_item_t->m_v) ) {
+            return expr;
+        }
+
+        ASR::expr_t* flattened_array_item_expr = flatten_ArrayItem(array_item_t->m_v);
+        ASR::ArrayItem_t* flattened_array_item = ASR::down_cast<ASR::ArrayItem_t>(flattened_array_item_expr);
+        array_item_t->m_v = flattened_array_item->m_v;
+        Vec<ASR::array_index_t> indices; indices.from_pointer_n_copy(
+            al, flattened_array_item->m_args, flattened_array_item->n_args);
+        indices.push_back(al, array_item_t->m_args[0]);
+        array_item_t->m_args = indices.p;
+        array_item_t->n_args = indices.size();
+        return expr;
+    }
+
+    bool TraverseArraySubscriptExpr(clang::ArraySubscriptExpr* x) {
+        clang::Expr* clang_array = x->getBase();
+        TraverseStmt(clang_array);
+        ASR::expr_t* array = flatten_ArrayItem(ASRUtils::EXPR(tmp));
+        clang::Expr* clang_index = x->getIdx();
+        TraverseStmt(clang_index);
+        ASR::expr_t* index = ASRUtils::EXPR(tmp);
+        Vec<ASR::array_index_t> indices; indices.reserve(al, 1);
+        ASR::array_index_t array_index; array_index.loc = index->base.loc;
+        array_index.m_left = nullptr; array_index.m_right = index; array_index.m_step = nullptr;
+        indices.push_back(al, array_index);
+        ASR::expr_t* array_item = ASRUtils::EXPR(ASR::make_ArrayItem_t(al, Lloc(x), array, indices.p, indices.size(),
+            ASRUtils::extract_type(ASRUtils::expr_type(array)), ASR::arraystorageType::RowMajor, nullptr));
+        array_item = flatten_ArrayItem(array_item);
+        tmp = (ASR::asr_t*) array_item;
+        return true;
+    }
+
+    bool TraverseCompoundAssignOperator(clang::CompoundAssignOperator* x) {
+        TraverseStmt(x->getLHS());
+        ASR::expr_t* x_lhs = ASRUtils::EXPR(tmp);
+        TraverseStmt(x->getRHS());
+        ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp);
+        CreateBinOp(x_lhs, x_rhs, ASR::binopType::Add, Lloc(x));
+        ASR::expr_t* sum_expr = ASRUtils::EXPR(tmp);
+        tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, sum_expr, nullptr);
+        is_stmt_created = true;
+        return true;
+    }
+
+    bool TraverseUnaryOperator(clang::UnaryOperator* x) {
+        clang::UnaryOperatorKind op = x->getOpcode();
+        switch( op ) {
+            case clang::UnaryOperatorKind::UO_PostInc: {
+                clang::Expr* expr = x->getSubExpr();
+                TraverseStmt(expr);
+                ASR::expr_t* var = ASRUtils::EXPR(tmp);
+                ASR::expr_t* incbyone = ASRUtils::EXPR(ASR::make_IntegerBinOp_t(
+                    al, Lloc(x), var, ASR::binopType::Add,
+                    ASRUtils::EXPR(ASR::make_IntegerConstant_t(
+                        al, Lloc(x), 1, ASRUtils::expr_type(var))),
+                    ASRUtils::expr_type(var), nullptr));
+                tmp = ASR::make_Assignment_t(al, Lloc(x), var, incbyone, nullptr);
+                is_stmt_created = true;
+                break;
+            }
+            default: {
+                throw SemanticError("Only postfix increment is supported so far", Lloc(x));
+            }
+        }
+        return true;
+    }
+
+    bool TraverseForStmt(clang::ForStmt* x) {
+        clang::Stmt* init_stmt = x->getInit();
+        TraverseStmt(init_stmt);
+        LCOMPILERS_ASSERT(tmp != nullptr && is_stmt_created);
+        current_body->push_back(al, ASRUtils::STMT(tmp));
+
+        clang::Expr* loop_cond = x->getCond();
+        TraverseStmt(loop_cond);
+        ASR::expr_t* test = ASRUtils::EXPR(tmp);
+
+        Vec<ASR::stmt_t*> body; body.reserve(al, 1);
+        Vec<ASR::stmt_t*>*current_body_copy = current_body;
+        current_body = &body;
+        clang::Stmt* loop_body = x->getBody();
+        TraverseStmt(loop_body);
+        clang::Stmt* inc_stmt = x->getInc();
+        TraverseStmt(inc_stmt);
+        LCOMPILERS_ASSERT(tmp != nullptr && is_stmt_created);
+        body.push_back(al, ASRUtils::STMT(tmp));
+        current_body = current_body_copy;
+
+        tmp = ASR::make_WhileLoop_t(al, Lloc(x), nullptr, test, body.p, body.size());
         is_stmt_created = true;
         return true;
     }

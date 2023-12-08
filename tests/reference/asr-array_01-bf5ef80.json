@@ -1,0 +1,13 @@
+{
+    "basename": "asr-array_01-bf5ef80",
+    "cmd": "lc --asr-dump --no-color {infile} -o {outfile} -extra-arg=\"-Isrc/runtime/include\"",
+    "infile": "tests/array_01.cpp",
+    "infile_hash": "32fa9685d6d249dac5bd70371ac559ad8d709ae6c9298a827fa448c5",
+    "outfile": null,
+    "outfile_hash": null,
+    "stdout": "asr-array_01-bf5ef80.stdout",
+    "stdout_hash": "141c00a55703c54d1d113b441b052bd1ac7dfc8cc1fb73b243532bfd",
+    "stderr": null,
+    "stderr_hash": null,
+    "returncode": 0
+}
