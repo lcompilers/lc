@@ -380,6 +380,18 @@ public:
         return true;
     }
 
+    void CreateBinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
+        ASR::binopType binop_type, const Location& loc) {
+        if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
+            ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
+                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+        } else {
+            throw SemanticError("Only integer type is supported so "
+                "far for binary operator", loc);
+        }
+    }
+
     bool TraverseBinaryOperator(clang::BinaryOperator *x) {
         clang::BinaryOperatorKind op = x->getOpcode();
         TraverseStmt(x->getLHS());
@@ -419,18 +431,26 @@ public:
                     is_cmpop = true;
                     break;
                 }
+                case clang::BO_LT: {
+                    cmpop_type = ASR::cmpopType::Lt;
+                    is_cmpop = true;
+                    break;
+                }
                 default: {
                     throw std::runtime_error("BinaryOperator not supported " + std::to_string(op));
                     break;
                 }
             }
             if( is_binop ) {
+                CreateBinOp(x_lhs, x_rhs, binop_type, Lloc(x));
+            } else if( is_cmpop ) {
                 if( ASRUtils::is_integer(*ASRUtils::expr_type(x_lhs)) &&
                     ASRUtils::is_integer(*ASRUtils::expr_type(x_rhs)) ) {
-                    tmp = ASR::make_IntegerBinOp_t(al, Lloc(x), x_lhs,
-                        binop_type, x_rhs, ASRUtils::expr_type(x_lhs), nullptr);
+                    tmp = ASR::make_IntegerCompare_t(al, Lloc(x), x_lhs,
+                        cmpop_type, x_rhs, ASRUtils::expr_type(x_lhs), nullptr);
                 } else {
-                    throw std::runtime_error("Only integer type is supported so far");
+                    throw std::runtime_error("Only integer type is supported so "
+                                             "far for comparison operator");
                 }
             } else {
                 throw std::runtime_error("Only binary operators supported so far");
@@ -485,6 +505,83 @@ public:
         tmp = ASR::make_Assignment_t(al, Lloc(x), return_var, ASRUtils::EXPR(tmp), nullptr);
         current_body->push_back(al, ASRUtils::STMT(tmp));
         tmp = ASR::make_Return_t(al, Lloc(x));
+        is_stmt_created = true;
+        return true;
+    }
+
+    bool TraverseArraySubscriptExpr(clang::ArraySubscriptExpr* x) {
+        clang::Expr* clang_array = x->getBase();
+        TraverseStmt(clang_array);
+        ASR::expr_t* array = ASRUtils::EXPR(tmp);
+        clang::Expr* clang_index = x->getIdx();
+        TraverseStmt(clang_index);
+        ASR::expr_t* index = ASRUtils::EXPR(tmp);
+        Vec<ASR::array_index_t> indices; indices.reserve(al, 1);
+        ASR::array_index_t array_index; array_index.loc = index->base.loc;
+        array_index.m_left = nullptr; array_index.m_right = index; array_index.m_step = nullptr;
+        indices.push_back(al, array_index);
+        tmp = ASR::make_ArrayItem_t(al, Lloc(x), array, indices.p, indices.size(),
+            ASRUtils::extract_type(ASRUtils::expr_type(array)), ASR::arraystorageType::RowMajor, nullptr);
+        return true;
+    }
+
+    bool TraverseCompoundAssignOperator(clang::CompoundAssignOperator* x) {
+        TraverseStmt(x->getLHS());
+        ASR::expr_t* x_lhs = ASRUtils::EXPR(tmp);
+        TraverseStmt(x->getRHS());
+        ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp);
+        CreateBinOp(x_lhs, x_rhs, ASR::binopType::Add, Lloc(x));
+        ASR::expr_t* sum_expr = ASRUtils::EXPR(tmp);
+        tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, sum_expr, nullptr);
+        is_stmt_created = true;
+        return true;
+    }
+
+    bool TraverseUnaryOperator(clang::UnaryOperator* x) {
+        clang::UnaryOperatorKind op = x->getOpcode();
+        switch( op ) {
+            case clang::UnaryOperatorKind::UO_PostInc: {
+                clang::Expr* expr = x->getSubExpr();
+                TraverseStmt(expr);
+                ASR::expr_t* var = ASRUtils::EXPR(tmp);
+                ASR::expr_t* incbyone = ASRUtils::EXPR(ASR::make_IntegerBinOp_t(
+                    al, Lloc(x), var, ASR::binopType::Add,
+                    ASRUtils::EXPR(ASR::make_IntegerConstant_t(
+                        al, Lloc(x), 1, ASRUtils::expr_type(var))),
+                    ASRUtils::expr_type(var), nullptr));
+                tmp = ASR::make_Assignment_t(al, Lloc(x), var, incbyone, nullptr);
+                is_stmt_created = true;
+                break;
+            }
+            default: {
+                throw SemanticError("Only postfix increment is supported so far", Lloc(x));
+            }
+        }
+        return true;
+    }
+
+    bool TraverseForStmt(clang::ForStmt* x) {
+        clang::Stmt* init_stmt = x->getInit();
+        TraverseStmt(init_stmt);
+        LCOMPILERS_ASSERT(tmp != nullptr && is_stmt_created);
+        current_body->push_back(al, ASRUtils::STMT(tmp));
+
+        clang::Expr* loop_cond = x->getCond();
+        TraverseStmt(loop_cond);
+        ASR::expr_t* test = ASRUtils::EXPR(tmp);
+
+        Vec<ASR::stmt_t*> body; body.reserve(al, 1);
+        Vec<ASR::stmt_t*>*current_body_copy = current_body;
+        current_body = &body;
+        clang::Stmt* loop_body = x->getBody();
+        TraverseStmt(loop_body);
+        clang::Stmt* inc_stmt = x->getInc();
+        TraverseStmt(inc_stmt);
+        LCOMPILERS_ASSERT(tmp != nullptr && is_stmt_created);
+        body.push_back(al, ASRUtils::STMT(tmp));
+        current_body = current_body_copy;
+
+        tmp = ASR::make_WhileLoop_t(al, Lloc(x), nullptr, test, body.p, body.size());
         is_stmt_created = true;
         return true;
     }
