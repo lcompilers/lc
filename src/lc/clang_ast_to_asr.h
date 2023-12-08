@@ -301,6 +301,22 @@ public:
         return true;
     }
 
+    bool TraverseDeclStmt(clang::DeclStmt* x) {
+        if( x->isSingleDecl() ) {
+            return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseDeclStmt(x);
+        }
+
+        clang::DeclGroup& decl_group = x->getDeclGroup().getDeclGroup();
+        for( size_t i = 0; i < decl_group.size(); i++ ) {
+            TraverseDecl(decl_group[i]);
+            if( is_stmt_created ) {
+                current_body->push_back(al, ASRUtils::STMT(tmp));
+            }
+        }
+        is_stmt_created = false;
+        return true;
+    }
+
     bool TraverseVarDecl(clang::VarDecl *x) {
         std::string name = x->getName().str();
         ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType());

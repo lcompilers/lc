@@ -9,8 +9,7 @@ int main()
         {{14, 15}, {16, 17}, {18, 19}},
         {{20, 21}, {22, 23}, {24, 25}}
     };
-    int sum1d = 0; // TODO Allow, int sum1d = 0, sum2d = 0;
-    int sum2d = 0;
+    int sum1d = 0, sum2d = 0;
 
     for( int i = 0; i < 5; i++ ) {
         sum1d += arr1d[i];
