@@ -162,6 +162,19 @@ public:
         array_t->m_type = array_t_flattened->m_type;
         array_t->m_dims = new_dims.p;
         array_t->n_dims = new_dims.size();
+        std::map<ASR::array_physical_typeType, int> physicaltype2priority = {
+            {ASR::array_physical_typeType::DescriptorArray, 2},
+            {ASR::array_physical_typeType::PointerToDataArray, 1},
+            {ASR::array_physical_typeType::FixedSizeArray, 0}
+        };
+        ASR::array_physical_typeType physical_type;
+        if( physicaltype2priority[array_t->m_physical_type] >
+            physicaltype2priority[array_t_flattened->m_physical_type] ) {
+            physical_type = array_t->m_physical_type;
+        } else {
+            physical_type = array_t_flattened->m_physical_type;
+        }
+        array_t->m_physical_type = physical_type;
         return array;
     }
 
@@ -175,6 +188,8 @@ public:
             type = ASRUtils::TYPE(ASR::make_Character_t(al, l, 1, -1, nullptr));
         } else if( clang_type->isIntegerType() ) {
             type = ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
+        } else if( clang_type->isFloatingType() ) {
+            type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 4));
         } else if( clang_type->isPointerType() ) {
             type = ClangTypeToASRType(qual_type->getPointeeType());
             if( !ASRUtils::is_character(*type) ) {
@@ -197,8 +212,24 @@ public:
             type = ASRUtils::TYPE(ASR::make_Array_t(al, l, type, vec.p, vec.size(),
                 ASR::array_physical_typeType::FixedSizeArray));
             type = flatten_Array(type);
+        } else if( clang_type->isVariableArrayType() ) {
+            const clang::ArrayType* array_type = clang_type->getAsArrayTypeUnsafe();
+            const clang::VariableArrayType* variable_array_type =
+                reinterpret_cast<const clang::VariableArrayType*>(array_type);
+            type = ClangTypeToASRType(array_type->getElementType());
+            clang::Expr* expr = variable_array_type->getSizeExpr();
+            TraverseStmt(expr);
+            Vec<ASR::dimension_t> vec; vec.reserve(al, 1);
+            ASR::dimension_t dim;
+            dim.loc = l; dim.m_length = ASRUtils::EXPR(tmp);
+            dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
+                ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+            vec.push_back(al, dim);
+            type = ASRUtils::make_Array_t_util(al, l, type, vec.p, vec.size());
+            type = flatten_Array(type);
         } else {
-            throw std::runtime_error("clang::QualType not yet supported.");
+            throw std::runtime_error("clang::QualType not yet supported " +
+                std::string(clang_type->getTypeClassName()));
         }
 
         if( qualifiers.hasConst() ) {
@@ -229,6 +260,32 @@ public:
         return true;
     }
 
+    bool TraverseImplicitCastExpr(clang::ImplicitCastExpr* x) {
+        clang::CastKind cast_kind = x->getCastKind();
+        ASR::cast_kindType asr_cast_kind;
+        switch( cast_kind ) {
+            case clang::CastKind::CK_IntegralToFloating: {
+                asr_cast_kind = ASR::cast_kindType::IntegerToReal;
+                break;
+            }
+            case clang::CastKind::CK_FloatingCast: {
+                asr_cast_kind = ASR::cast_kindType::RealToReal;
+                break;
+            }
+            default: {
+                clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseImplicitCastExpr(x);
+                return true;
+            }
+        }
+        clang::Expr* sub_expr = x->getSubExpr();
+        TraverseStmt(sub_expr);
+        ASR::expr_t* arg = ASRUtils::EXPR(tmp);
+        tmp = ASR::make_Cast_t(al, Lloc(x), arg, asr_cast_kind,
+                ClangTypeToASRType(x->getType()), nullptr);
+        is_stmt_created = false;
+        return true;
+    }
+
     void handle_printf(clang::CallExpr *x) {
         Vec<ASR::expr_t*> args;
         args.reserve(al, 1);
@@ -255,8 +312,31 @@ public:
         ASR::expr_t* callee = ASRUtils::EXPR(tmp);
         if( check_printf(callee) ) {
             handle_printf(x);
+            return true;
+        }
+
+        clang::Expr** args = x->getArgs();
+        size_t n_args = x->getNumArgs();
+        Vec<ASR::call_arg_t> call_args;
+        call_args.reserve(al, n_args);
+        for( size_t i = 0; i < n_args; i++ ) {
+            TraverseStmt(args[i]);
+            ASR::expr_t* arg = ASRUtils::EXPR(tmp);
+            ASR::call_arg_t call_arg;
+            call_arg.loc = arg->base.loc;
+            call_arg.m_value = arg;
+            call_args.push_back(al, call_arg);
+        }
+
+        ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
+        ASR::symbol_t* callee_sym = callee_Var->m_v;
+        if( x->getCallReturnType(*Context).split().asPair().first->isVoidType() ) {
+            throw std::runtime_error("Void return type not yet supported.");
         } else {
-            throw std::runtime_error("Calling user defined functions isn't supported yet.");
+            const clang::QualType& qual_type = x->getCallReturnType(*Context);
+            tmp = ASRUtils::make_FunctionCall_t_util(al, Lloc(x), callee_sym,
+                callee_sym, call_args.p, call_args.size(), ClangTypeToASRType(qual_type),
+                nullptr, nullptr);
         }
         return true;
     }
@@ -402,8 +482,12 @@ public:
             ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
                 binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
-        } else {
-            throw SemanticError("Only integer type is supported so "
+        } else if( ASRUtils::is_real(*ASRUtils::expr_type(lhs)) &&
+                   ASRUtils::is_real(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_RealBinOp_t(al, loc, lhs,
+                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+        }  else {
+            throw SemanticError("Only integer and real types are supported so "
                 "far for binary operator", loc);
         }
     }
@@ -489,6 +573,14 @@ public:
         int64_t i = x->getValue().getLimitedValue();
         tmp = ASR::make_IntegerConstant_t(al, Lloc(x), i,
             ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)));
+        is_stmt_created = false;
+        return true;
+    }
+
+    bool TraverseFloatingLiteral(clang::FloatingLiteral* x) {
+        double d = x->getValue().convertToDouble();
+        tmp = ASR::make_RealConstant_t(al, Lloc(x), d,
+            ASRUtils::TYPE(ASR::make_Real_t(al, Lloc(x), 8)));
         is_stmt_created = false;
         return true;
     }

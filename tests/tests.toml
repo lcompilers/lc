@@ -27,3 +27,8 @@ fortran = true
 filename = "array_01.cpp"
 extra_arg = "-Isrc/runtime/include"
 asr = true
+
+[[test]]
+filename = "array_02.cpp"
+extra_arg = "-Isrc/runtime/include"
+asr = true
