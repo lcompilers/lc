@@ -65,3 +65,5 @@ jobs:
             ./src/bin/lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" --
 
             ./src/bin/lc tests/array_01.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
+
+            ./src/bin/lc tests/array_02.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
