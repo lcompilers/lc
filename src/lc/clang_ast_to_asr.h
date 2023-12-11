@@ -260,6 +260,32 @@ public:
         return true;
     }
 
+    bool TraverseImplicitCastExpr(clang::ImplicitCastExpr* x) {
+        clang::CastKind cast_kind = x->getCastKind();
+        ASR::cast_kindType asr_cast_kind;
+        switch( cast_kind ) {
+            case clang::CastKind::CK_IntegralToFloating: {
+                asr_cast_kind = ASR::cast_kindType::IntegerToReal;
+                break;
+            }
+            case clang::CastKind::CK_FloatingCast: {
+                asr_cast_kind = ASR::cast_kindType::RealToReal;
+                break;
+            }
+            default: {
+                clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseImplicitCastExpr(x);
+                return true;
+            }
+        }
+        clang::Expr* sub_expr = x->getSubExpr();
+        TraverseStmt(sub_expr);
+        ASR::expr_t* arg = ASRUtils::EXPR(tmp);
+        tmp = ASR::make_Cast_t(al, Lloc(x), arg, asr_cast_kind,
+                ClangTypeToASRType(x->getType()), nullptr);
+        is_stmt_created = false;
+        return true;
+    }
+
     void handle_printf(clang::CallExpr *x) {
         Vec<ASR::expr_t*> args;
         args.reserve(al, 1);
@@ -456,8 +482,12 @@ public:
             ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
                 binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
-        } else {
-            throw SemanticError("Only integer type is supported so "
+        } else if( ASRUtils::is_real(*ASRUtils::expr_type(lhs)) &&
+                   ASRUtils::is_real(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_RealBinOp_t(al, loc, lhs,
+                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+        }  else {
+            throw SemanticError("Only integer and real types are supported so "
                 "far for binary operator", loc);
         }
     }
@@ -543,6 +573,14 @@ public:
         int64_t i = x->getValue().getLimitedValue();
         tmp = ASR::make_IntegerConstant_t(al, Lloc(x), i,
             ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)));
+        is_stmt_created = false;
+        return true;
+    }
+
+    bool TraverseFloatingLiteral(clang::FloatingLiteral* x) {
+        double d = x->getValue().convertToDouble();
+        tmp = ASR::make_RealConstant_t(al, Lloc(x), d,
+            ASRUtils::TYPE(ASR::make_Real_t(al, Lloc(x), 8)));
         is_stmt_created = false;
         return true;
     }
