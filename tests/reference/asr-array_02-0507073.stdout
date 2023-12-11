@@ -1,0 +1,775 @@
+(TranslationUnit
+    (SymbolTable
+        1
+        {
+            main:
+                (Function
+                    (SymbolTable
+                        4
+                        {
+                            __return_var:
+                                (Variable
+                                    4
+                                    __return_var
+                                    []
+                                    ReturnVar
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            sum:
+                                (Variable
+                                    4
+                                    sum
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Real 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                )
+                        })
+                    main
+                    (FunctionType
+                        []
+                        (Integer 4)
+                        Source
+                        Implementation
+                        ()
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        []
+                        .false.
+                    )
+                    []
+                    []
+                    [(=
+                        (Var 4 sum)
+                        (FunctionCall
+                            1 matmul_test
+                            1 matmul_test
+                            [((IntegerConstant 4 (Integer 4)))
+                            ((IntegerConstant 10 (Integer 4)))
+                            ((IntegerConstant 4 (Integer 4)))]
+                            (Real 4)
+                            ()
+                            ()
+                        )
+                        ()
+                    )
+                    (Print
+                        [(Cast
+                            (Var 4 sum)
+                            RealToReal
+                            (Real 4)
+                            ()
+                        )]
+                        ()
+                        ()
+                    )
+                    (=
+                        (Var 4 __return_var)
+                        (IntegerConstant 0 (Integer 4))
+                        ()
+                    )
+                    (Return)]
+                    (Var 4 __return_var)
+                    Public
+                    .false.
+                    .false.
+                    ()
+                ),
+            main_program:
+                (Program
+                    (SymbolTable
+                        5
+                        {
+                            exit_code:
+                                (Variable
+                                    5
+                                    exit_code
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                )
+                        })
+                    main_program
+                    [main]
+                    [(=
+                        (Var 5 exit_code)
+                        (FunctionCall
+                            1 main
+                            1 main
+                            []
+                            (Integer 4)
+                            ()
+                            ()
+                        )
+                        ()
+                    )]
+                ),
+            matmul_test:
+                (Function
+                    (SymbolTable
+                        3
+                        {
+                            __return_var:
+                                (Variable
+                                    3
+                                    __return_var
+                                    []
+                                    ReturnVar
+                                    ()
+                                    ()
+                                    Default
+                                    (Real 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            arr1d:
+                                (Variable
+                                    3
+                                    arr1d
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Array
+                                        (Real 4)
+                                        [((IntegerConstant 0 (Integer 4))
+                                        (Var 3 n))]
+                                        PointerToDataArray
+                                    )
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            arr2d:
+                                (Variable
+                                    3
+                                    arr2d
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Array
+                                        (Real 4)
+                                        [((IntegerConstant 0 (Integer 4))
+                                        (Var 3 nums))
+                                        ((IntegerConstant 0 (Integer 4))
+                                        (Var 3 m))
+                                        ((IntegerConstant 0 (Integer 4))
+                                        (Var 3 n))]
+                                        PointerToDataArray
+                                    )
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            i:
+                                (Variable
+                                    3
+                                    i
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            i1:
+                                (Variable
+                                    3
+                                    i1
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            j:
+                                (Variable
+                                    3
+                                    j
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            j1:
+                                (Variable
+                                    3
+                                    j1
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            k:
+                                (Variable
+                                    3
+                                    k
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            m:
+                                (Variable
+                                    3
+                                    m
+                                    []
+                                    InOut
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            n:
+                                (Variable
+                                    3
+                                    n
+                                    []
+                                    InOut
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            num:
+                                (Variable
+                                    3
+                                    num
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            num1:
+                                (Variable
+                                    3
+                                    num1
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            nums:
+                                (Variable
+                                    3
+                                    nums
+                                    []
+                                    InOut
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            output:
+                                (Variable
+                                    3
+                                    output
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Real 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            sum:
+                                (Variable
+                                    3
+                                    sum
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Real 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                )
+                        })
+                    matmul_test
+                    (FunctionType
+                        [(Integer 4)
+                        (Integer 4)
+                        (Integer 4)]
+                        (Real 4)
+                        Source
+                        Implementation
+                        ()
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        []
+                        .false.
+                    )
+                    []
+                    [(Var 3 m)
+                    (Var 3 n)
+                    (Var 3 nums)]
+                    [(=
+                        (Var 3 output)
+                        (Cast
+                            (RealConstant
+                                0.000000
+                                (Real 8)
+                            )
+                            RealToReal
+                            (Real 4)
+                            ()
+                        )
+                        ()
+                    )
+                    (=
+                        (Var 3 num)
+                        (IntegerConstant 0 (Integer 4))
+                        ()
+                    )
+                    (WhileLoop
+                        ()
+                        (IntegerCompare
+                            (Var 3 num)
+                            Lt
+                            (Var 3 nums)
+                            (Integer 4)
+                            ()
+                        )
+                        [(=
+                            (Var 3 i)
+                            (IntegerConstant 0 (Integer 4))
+                            ()
+                        )
+                        (WhileLoop
+                            ()
+                            (IntegerCompare
+                                (Var 3 i)
+                                Lt
+                                (Var 3 m)
+                                (Integer 4)
+                                ()
+                            )
+                            [(=
+                                (Var 3 j)
+                                (IntegerConstant 0 (Integer 4))
+                                ()
+                            )
+                            (WhileLoop
+                                ()
+                                (IntegerCompare
+                                    (Var 3 j)
+                                    Lt
+                                    (Var 3 n)
+                                    (Integer 4)
+                                    ()
+                                )
+                                [(=
+                                    (ArrayItem
+                                        (Var 3 arr2d)
+                                        [(()
+                                        (Var 3 num)
+                                        ())
+                                        (()
+                                        (Var 3 i)
+                                        ())
+                                        (()
+                                        (Var 3 j)
+                                        ())]
+                                        (Real 4)
+                                        RowMajor
+                                        ()
+                                    )
+                                    (RealBinOp
+                                        (Cast
+                                            (IntegerBinOp
+                                                (Var 3 i)
+                                                Add
+                                                (Var 3 j)
+                                                (Integer 4)
+                                                ()
+                                            )
+                                            IntegerToReal
+                                            (Real 4)
+                                            ()
+                                        )
+                                        Div
+                                        (Cast
+                                            (IntegerBinOp
+                                                (Var 3 m)
+                                                Mul
+                                                (Var 3 n)
+                                                (Integer 4)
+                                                ()
+                                            )
+                                            IntegerToReal
+                                            (Real 4)
+                                            ()
+                                        )
+                                        (Real 4)
+                                        ()
+                                    )
+                                    ()
+                                )
+                                (=
+                                    (Var 3 j)
+                                    (IntegerBinOp
+                                        (Var 3 j)
+                                        Add
+                                        (IntegerConstant 1 (Integer 4))
+                                        (Integer 4)
+                                        ()
+                                    )
+                                    ()
+                                )]
+                            )
+                            (=
+                                (Var 3 i)
+                                (IntegerBinOp
+                                    (Var 3 i)
+                                    Add
+                                    (IntegerConstant 1 (Integer 4))
+                                    (Integer 4)
+                                    ()
+                                )
+                                ()
+                            )]
+                        )
+                        (=
+                            (Var 3 num)
+                            (IntegerBinOp
+                                (Var 3 num)
+                                Add
+                                (IntegerConstant 1 (Integer 4))
+                                (Integer 4)
+                                ()
+                            )
+                            ()
+                        )]
+                    )
+                    (=
+                        (Var 3 k)
+                        (IntegerConstant 0 (Integer 4))
+                        ()
+                    )
+                    (WhileLoop
+                        ()
+                        (IntegerCompare
+                            (Var 3 k)
+                            Lt
+                            (Var 3 n)
+                            (Integer 4)
+                            ()
+                        )
+                        [(=
+                            (ArrayItem
+                                (Var 3 arr1d)
+                                [(()
+                                (Var 3 k)
+                                ())]
+                                (Real 4)
+                                RowMajor
+                                ()
+                            )
+                            (RealBinOp
+                                (Cast
+                                    (Var 3 k)
+                                    IntegerToReal
+                                    (Real 4)
+                                    ()
+                                )
+                                Div
+                                (Cast
+                                    (Var 3 n)
+                                    IntegerToReal
+                                    (Real 4)
+                                    ()
+                                )
+                                (Real 4)
+                                ()
+                            )
+                            ()
+                        )
+                        (=
+                            (Var 3 k)
+                            (IntegerBinOp
+                                (Var 3 k)
+                                Add
+                                (IntegerConstant 1 (Integer 4))
+                                (Integer 4)
+                                ()
+                            )
+                            ()
+                        )]
+                    )
+                    (=
+                        (Var 3 sum)
+                        (Cast
+                            (RealConstant
+                                0.000000
+                                (Real 8)
+                            )
+                            RealToReal
+                            (Real 4)
+                            ()
+                        )
+                        ()
+                    )
+                    (=
+                        (Var 3 num1)
+                        (IntegerConstant 0 (Integer 4))
+                        ()
+                    )
+                    (WhileLoop
+                        ()
+                        (IntegerCompare
+                            (Var 3 num1)
+                            Lt
+                            (Var 3 nums)
+                            (Integer 4)
+                            ()
+                        )
+                        [(=
+                            (Var 3 i1)
+                            (IntegerConstant 0 (Integer 4))
+                            ()
+                        )
+                        (WhileLoop
+                            ()
+                            (IntegerCompare
+                                (Var 3 i1)
+                                Lt
+                                (IntegerConstant 4 (Integer 4))
+                                (Integer 4)
+                                ()
+                            )
+                            [(=
+                                (Var 3 output)
+                                (Cast
+                                    (RealConstant
+                                        0.000000
+                                        (Real 8)
+                                    )
+                                    RealToReal
+                                    (Real 4)
+                                    ()
+                                )
+                                ()
+                            )
+                            (=
+                                (Var 3 j1)
+                                (IntegerConstant 0 (Integer 4))
+                                ()
+                            )
+                            (WhileLoop
+                                ()
+                                (IntegerCompare
+                                    (Var 3 j1)
+                                    Lt
+                                    (IntegerConstant 10 (Integer 4))
+                                    (Integer 4)
+                                    ()
+                                )
+                                [(=
+                                    (Var 3 output)
+                                    (RealBinOp
+                                        (Var 3 output)
+                                        Add
+                                        (RealBinOp
+                                            (ArrayItem
+                                                (Var 3 arr2d)
+                                                [(()
+                                                (Var 3 num1)
+                                                ())
+                                                (()
+                                                (Var 3 i1)
+                                                ())
+                                                (()
+                                                (Var 3 j1)
+                                                ())]
+                                                (Real 4)
+                                                RowMajor
+                                                ()
+                                            )
+                                            Mul
+                                            (ArrayItem
+                                                (Var 3 arr1d)
+                                                [(()
+                                                (Var 3 j1)
+                                                ())]
+                                                (Real 4)
+                                                RowMajor
+                                                ()
+                                            )
+                                            (Real 4)
+                                            ()
+                                        )
+                                        (Real 4)
+                                        ()
+                                    )
+                                    ()
+                                )
+                                (=
+                                    (Var 3 j1)
+                                    (IntegerBinOp
+                                        (Var 3 j1)
+                                        Add
+                                        (IntegerConstant 1 (Integer 4))
+                                        (Integer 4)
+                                        ()
+                                    )
+                                    ()
+                                )]
+                            )
+                            (=
+                                (Var 3 sum)
+                                (RealBinOp
+                                    (Var 3 sum)
+                                    Add
+                                    (Var 3 output)
+                                    (Real 4)
+                                    ()
+                                )
+                                ()
+                            )
+                            (=
+                                (Var 3 i1)
+                                (IntegerBinOp
+                                    (Var 3 i1)
+                                    Add
+                                    (IntegerConstant 1 (Integer 4))
+                                    (Integer 4)
+                                    ()
+                                )
+                                ()
+                            )]
+                        )
+                        (=
+                            (Var 3 num1)
+                            (IntegerBinOp
+                                (Var 3 num1)
+                                Add
+                                (IntegerConstant 1 (Integer 4))
+                                (Integer 4)
+                                ()
+                            )
+                            ()
+                        )]
+                    )
+                    (=
+                        (Var 3 __return_var)
+                        (Var 3 sum)
+                        ()
+                    )
+                    (Return)]
+                    (Var 3 __return_var)
+                    Public
+                    .false.
+                    .false.
+                    ()
+                )
+        })
+    []
+)
