@@ -745,7 +745,7 @@ int main(int argc, const char **argv) {
         tmp_file = outfile + "__generated__.f90";
         status = compile_to_fortran(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
     } else if (backend == Backend::llvm) {
-        tmp_file = outfile + "__generated__.o";
+        tmp_file = ArgC ? outfile : (outfile + "__generated__.o");
         status = compile_to_binary_object(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
