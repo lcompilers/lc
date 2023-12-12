@@ -42,6 +42,7 @@ public:
     ASR::asr_t* tmp;
     Vec<ASR::stmt_t*>* current_body;
     bool is_stmt_created;
+    std::vector<std::map<std::string, std::string>> scopes;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
@@ -399,6 +400,19 @@ public:
 
     bool TraverseVarDecl(clang::VarDecl *x) {
         std::string name = x->getName().str();
+        if( scopes.size() > 0 ) {
+            if( scopes.back().find(name) != scopes.back().end() ) {
+                throw std::runtime_error(name + std::string(" is already defined."));
+            } else {
+                std::string aliased_name = current_scope->get_unique_name(name);
+                scopes.back()[name] = aliased_name;
+                name = aliased_name;
+            }
+        } else {
+            if( current_scope->resolve_symbol(name) ) {
+                throw std::runtime_error(name + std::string(" is already defined."));
+            }
+        }
         ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType());
         ASR::symbol_t *v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
             current_scope, s2c(al, name), nullptr, 0, ASR::intentType::Local, nullptr, nullptr,
@@ -560,9 +574,29 @@ public:
         return true;
     }
 
+    ASR::symbol_t* check_aliases(std::string name) {
+        for( auto itr = scopes.rbegin(); itr != scopes.rend(); itr++ ) {
+            std::map<std::string, std::string>& alias = *itr;
+            if( alias.find(name) != alias.end() ) {
+                return current_scope->resolve_symbol(alias[name]);
+            }
+        }
+
+        return nullptr;
+    }
+
+    ASR::symbol_t* resolve_symbol(std::string name) {
+        ASR::symbol_t* sym = check_aliases(name);
+        if( sym ) {
+            return sym;
+        }
+
+        return current_scope->resolve_symbol(name);
+    }
+
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
-        ASR::symbol_t* sym = current_scope->resolve_symbol(name);
+        ASR::symbol_t* sym = resolve_symbol(name);
         LCOMPILERS_ASSERT(sym != nullptr);
         tmp = ASR::make_Var_t(al, Lloc(x), sym);
         is_stmt_created = false;
@@ -692,6 +726,8 @@ public:
     }
 
     bool TraverseForStmt(clang::ForStmt* x) {
+        std::map<std::string, std::string> alias;
+        scopes.push_back(alias);
         clang::Stmt* init_stmt = x->getInit();
         TraverseStmt(init_stmt);
         LCOMPILERS_ASSERT(tmp != nullptr && is_stmt_created);
@@ -714,6 +750,7 @@ public:
 
         tmp = ASR::make_WhileLoop_t(al, Lloc(x), nullptr, test, body.p, body.size());
         is_stmt_created = true;
+        scopes.pop_back();
         return true;
     }
 
