@@ -412,19 +412,6 @@
                     (Var 3 n)
                     (Var 3 nums)]
                     [(=
-                        (Var 3 output)
-                        (Cast
-                            (RealConstant
-                                0.000000
-                                (Real 8)
-                            )
-                            RealToReal
-                            (Real 4)
-                            ()
-                        )
-                        ()
-                    )
-                    (=
                         (Var 3 num)
                         (IntegerConstant 0 (Integer 4))
                         ()
