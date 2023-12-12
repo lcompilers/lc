@@ -8,7 +8,7 @@ float matmul_test(int m, int n, int nums) {
     float arr1d[n];
     float arr2d[nums][m][n];
     float sum;
-    float output = (float) 0.0; // TODO: Remove float cast
+    float output = 0.0;
     for( int num = 0; num < nums; num++ ) {
         for( int i = 0; i < m; i++ ) {
             for( int j = 0; j < n; j++ ) {
@@ -21,10 +21,10 @@ float matmul_test(int m, int n, int nums) {
         arr1d[k] = (float) k / (float) n;
     }
 
-    sum = (float) 0.0; // TODO: Remove float cast
+    sum = 0.0;
     for( int num1 = 0; num1 < nums; num1++ ) {
         for( int i1 = 0; i1 < M; i1++ ) {
-            output = (float) 0.0; // TODO: Remove float cast
+            output = 0.0;
             for( int j1 = 0; j1 < N; j1++ ) {
                 output += arr2d[num1][i1][j1] * arr1d[j1];
             }

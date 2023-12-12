@@ -2,7 +2,7 @@
     "basename": "asr-array_02-0507073",
     "cmd": "lc --asr-dump --no-color {infile} -o {outfile} -extra-arg=\"-Isrc/runtime/include\"",
     "infile": "tests/array_02.cpp",
-    "infile_hash": "5c6926406efadeff14c539938b4a4e0fc9d3e98c8a5033cc3d909c7b",
+    "infile_hash": "08d915c81156be4dd97850551458df249dbd05e24685d14350a33c5b",
     "outfile": null,
     "outfile_hash": null,
     "stdout": "asr-array_02-0507073.stdout",
