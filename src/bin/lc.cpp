@@ -54,6 +54,9 @@ static cl::opt<std::string>
     ArgO("o",
     cl::desc(Options.getOptionHelpText(options::OPT_o)), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
+    ArgC("c",
+    cl::desc(Options.getOptionHelpText(options::OPT_c)), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
     ShowWAT("show-wat",
     cl::desc("Show WAT (WebAssembly Text Format) and exit"), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
