@@ -36,6 +36,8 @@ static const opt::OptTable &Options = getDriverOptTable();
 
 static cl::opt<bool> ASTDump("ast-dump",
     cl::desc(Options.getOptionHelpText(options::OPT_ast_dump)), cl::cat(ClangCheckCategory));
+static cl::opt<std::string> ASTDumpFile("ast-dump-file",
+    cl::desc("dump the AST output in the specified file"), cl::cat(ClangCheckCategory));
 static cl::opt<bool> ASTList("ast-list",
     cl::desc(Options.getOptionHelpText(options::OPT_ast_list)), cl::cat(ClangCheckCategory));
 static cl::opt<bool> ASTPrint("ast-print",
@@ -116,11 +118,22 @@ std::string construct_outfile(std::string &arg_file, std::string &ArgO) {
 class ClangCheckActionFactory {
 
 public:
+
+    std::string infile;
+
+    ClangCheckActionFactory(std::string infile_): infile(infile_) {}
+
     std::unique_ptr<clang::ASTConsumer> newASTConsumer() {
         if (ASTList) {
             return clang::CreateASTDeclNodeLister();
-        } else if (ASTDump) {
-            return clang::CreateASTDumper(nullptr /*Dump to stdout.*/, ASTDumpFilter,
+        } else if ( ASTDump ) {
+            llvm::raw_fd_ostream* llvm_fd_ostream = nullptr;
+            if( ASTDumpFile.size() > 0 ) {
+                std::error_code errorCode;
+                llvm_fd_ostream = new llvm::raw_fd_ostream(ASTDumpFile, errorCode);
+            }
+            std::unique_ptr<llvm::raw_ostream> llvm_ostream(llvm_fd_ostream);
+            return clang::CreateASTDumper(std::move(llvm_ostream), ASTDumpFilter,
                                           /*DumpDecls=*/true,
                                           /*Deserialize=*/false,
                                           /*DumpLookups=*/false,
@@ -690,9 +703,11 @@ int main(int argc, const char **argv) {
     std::vector<std::string> sourcePaths = OptionsParser.getSourcePathList();
     ClangTool Tool(OptionsParser.getCompilations(), sourcePaths);
 
+    std::string infile = sourcePaths[0];
+
     // Handle Clang related options in the following
     if (ASTDump || ASTList || ASTPrint) {
-        ClangCheckActionFactory CheckFactory;
+        ClangCheckActionFactory CheckFactory(infile);
         int status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
         return status;
     }
@@ -707,7 +722,6 @@ int main(int argc, const char **argv) {
         return status;
     }
 
-    std::string infile = sourcePaths[0];
     if (ASRDump) {
         bool indent = !NoIndent, color = !NoColor;
         std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
