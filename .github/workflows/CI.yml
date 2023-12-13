@@ -75,13 +75,3 @@ jobs:
             # Test including iostream and span headers
             lc tests/span_01.cpp --ast-dump --ast-dump-file="tests/span_01.ast" --extra-arg="-std=c++20" --
             cat tests/span_01.ast
-
-      - name: Test3 (macOS)
-        shell: bash -l -e {0}
-        if: contains(matrix.os, 'macos')
-        run: |
-            which clang
-
-            # Test including iostream and span headers
-            lc tests/span_01.cpp --ast-dump --ast-dump-file="tests/span_01.ast" --extra-arg="-std=c++20" --
-            cat tests/span_01.ast
