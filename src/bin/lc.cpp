@@ -14,7 +14,7 @@
 #include <libasr/assert.h>
 #include <libasr/pass/pass_manager.h>
 #include <libasr/pickle.h>
-#include <libasr/codegen/evaluator.h>
+#include <libasr/codegen/c_evaluator.h>
 #include <libasr/codegen/asr_to_c.h>
 #include <libasr/codegen/asr_to_cpp.h>
 #include <libasr/codegen/asr_to_fortran.h>

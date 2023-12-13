@@ -79,14 +79,14 @@ set(SRC
 )
 if (WITH_LLVM)
     set(SRC ${SRC}
-        codegen/evaluator.cpp
+        codegen/c_evaluator.cpp
         codegen/asr_to_llvm.cpp
         codegen/llvm_array_utils.cpp
         codegen/llvm_utils.cpp
     )
     # We use deprecated API in LLVM, so we disable the warning until we upgrade
     if (NOT MSVC)
-        set_source_files_properties(codegen/evaluator.cpp PROPERTIES
+        set_source_files_properties(codegen/c_evaluator.cpp PROPERTIES
             COMPILE_FLAGS -Wno-deprecated-declarations)
         set_source_files_properties(codegen/asr_to_llvm.cpp PROPERTIES
             COMPILE_FLAGS -Wno-deprecated-declarations)
