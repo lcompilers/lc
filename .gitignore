@@ -12,6 +12,8 @@ _CPack_Packages
 /CMakeSettings.json
 src/libasr/libasr.a.*
 build/
+*.DS_Store*
+*.ast
 
 ## libraries
 *.a
