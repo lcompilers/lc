@@ -39,13 +39,14 @@ jobs:
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
             ./build.sh
+            export PATH=$CONDA_PREFIX/bin:$PATH
 
       - name: Test (Linux / macOS)
         shell: bash -l -e {0}
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
-            ./src/bin/lc --ast-dump tests/test.cpp
-            ./src/bin/lc --extra-arg=-Isrc/runtime/include examples/expr2.c --asr-dump
+            lc --ast-dump tests/test.cpp
+            lc --extra-arg=-Isrc/runtime/include examples/expr2.c --asr-dump
             ./run_tests.py
 
       - name: Test2 (Linux / macOS)
@@ -58,17 +59,19 @@ jobs:
             which clang
             which node
 
-            ./src/bin/lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" --
+            lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" --
 
-            ./src/bin/lc examples/expr2.c --backend wasm --extra-arg="-Isrc/runtime/include" --
+            lc examples/expr2.c --backend wasm --extra-arg="-Isrc/runtime/include" --
 
-            ./src/bin/lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" --
+            lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" --
 
-            ./src/bin/lc tests/array_01.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
+            lc tests/array_01.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
 
-            ./src/bin/lc tests/array_02.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
+            lc tests/array_02.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
+
+            lc tests/array_02.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
 
             # Test generating object files
-            ./src/bin/lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" -o c_o -c --
-            ./src/bin/lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" -o llvm_o -c --
+            lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" -o c_o -c --
+            lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" -o llvm_o -c --
             ls -1
