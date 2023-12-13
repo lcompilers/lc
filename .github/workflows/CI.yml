@@ -26,14 +26,8 @@ jobs:
           submodules: recursive
 
       - uses: mamba-org/provision-with-micromamba@main
-        if: contains(matrix.os, 'ubuntu')
         with:
           environment-file: environment_unix.yml
-
-      - uses: mamba-org/provision-with-micromamba@main
-        if: contains(matrix.os, 'macos')
-        with:
-          environment-file: environment_macos.yml
 
       - uses: hendrikmuhs/ccache-action@main
         with:
@@ -77,12 +71,6 @@ jobs:
             lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" -o c_o -c --
             lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" -o llvm_o -c --
             ls -1
-
-      - name: Test3 (macOS)
-        shell: bash -l -e {0}
-        if: contains(matrix.os, 'macos')
-        run: |
-            which clang
 
             # Test including iostream and span headers
             lc tests/span_01.cpp --ast-dump --ast-dump-file="tests/span_01.ast" --extra-arg="-std=c++20" --
