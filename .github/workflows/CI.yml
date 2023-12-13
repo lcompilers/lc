@@ -53,11 +53,7 @@ jobs:
         shell: bash -l -e {0}
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
-            # clang from conda does not work so deactivate the conda environment
-            micromamba deactivate
-
             which clang
-            which node
 
             lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" --
 
