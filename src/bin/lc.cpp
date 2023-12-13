@@ -54,6 +54,9 @@ static cl::opt<std::string>
     ArgO("o",
     cl::desc(Options.getOptionHelpText(options::OPT_o)), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
+    ArgC("c",
+    cl::desc(Options.getOptionHelpText(options::OPT_c)), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
     ShowWAT("show-wat",
     cl::desc("Show WAT (WebAssembly Text Format) and exit"), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
@@ -370,6 +373,50 @@ int compile_to_binary_object(Allocator &al, const std::string &infile,
     }
 
     e.save_object_file(*(m->m_m), outfile);
+    return 0;
+}
+
+int compile_c_to_object_file(const std::string &infile,
+        const std::string &outfile) {
+
+    std::string CC = "cc";
+    char *env_CC = std::getenv("LFORTRAN_CC");
+    if (env_CC) CC = env_CC;
+    std::string options;
+    options += "-I" + LCompilers::LC::get_runtime_library_c_header_dir() + " ";
+    std::string cmd = CC + " " + options + " -o " + outfile + " -c " + infile;
+    int err = system(cmd.c_str());
+    if (err) {
+        std::cout << "The command '" + cmd + "' failed." << std::endl;
+        return 1;
+    }
+    return 0;
+}
+
+int compile_cpp_to_object_file(const std::string &infile,
+        const std::string &outfile) {
+
+    std::string CXX = "g++";
+    std::string options;
+    options += "-I" + LCompilers::LC::get_runtime_library_c_header_dir() + " ";
+    std::string cmd = CXX + " " + options + " -o " + outfile + " -c " + infile;
+    int err = system(cmd.c_str());
+    if (err) {
+        std::cout << "The command '" + cmd + "' failed." << std::endl;
+        return 1;
+    }
+    return 0;
+}
+
+int compile_fortran_to_object_file(const std::string &infile,
+        const std::string &outfile) {
+
+    std::string cmd = "gfortran -fno-backtrace -o " + outfile + " -c " + infile;
+    int err = system(cmd.c_str());
+    if (err) {
+        std::cout << "The command '" + cmd + "' failed." << std::endl;
+        return 1;
+    }
     return 0;
 }
 
@@ -698,7 +745,7 @@ int main(int argc, const char **argv) {
         tmp_file = outfile + "__generated__.f90";
         status = compile_to_fortran(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
     } else if (backend == Backend::llvm) {
-        tmp_file = outfile + "__generated__.o";
+        tmp_file = ArgC ? outfile : (outfile + "__generated__.o");
         status = compile_to_binary_object(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
@@ -708,6 +755,19 @@ int main(int argc, const char **argv) {
 
     LCompilers::CompilerOptions co;
     co.arg_o = ArgO;
+
+    if (ArgC) {
+        // generate object file from source code
+        if (backend == Backend::c) {
+            status = compile_c_to_object_file(tmp_file, outfile);
+        } else if (backend == Backend::cpp) {
+            status = compile_cpp_to_object_file(tmp_file, outfile);
+        } else if (backend == Backend::fortran) {
+            status = compile_fortran_to_object_file(tmp_file, outfile);
+        }
+        return status;
+    }
+
     std::vector<std::string> infiles = {tmp_file};
     status = link_executable(infiles, outfile, LCompilers::LC::get_runtime_library_dir(), backend, false, false, true, co);
     return status;
