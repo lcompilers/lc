@@ -59,6 +59,17 @@ public:
     }
 
     template <typename T>
+    std::string get_file_name(T* x) {
+        clang::SourceLocation loc = x->getLocation();
+        if( loc.isInvalid() ) {
+            return "";
+        }
+
+        clang::FullSourceLoc full_source_loc = Context->getFullLoc(loc);
+        return std::string(full_source_loc.getPresumedLoc().getFilename());
+    }
+
+    template <typename T>
     std::string loc(T *x) {
         uint64_t first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
         uint64_t last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
@@ -754,6 +765,42 @@ public:
         return true;
     }
 
+    template <typename T>
+    bool process_AST_node(T* x) {
+        std::string file_path = get_file_name(x);
+        if( file_path.size() == 0 ) {
+            return false;
+        }
+
+        std::vector<std::string> include_paths = {
+            "include/c++/v1",
+            "include/stddef.h",
+            "include/__stddef_max_align_t.h",
+            "usr/include",
+            "mambaforge/envs",
+        };
+        for( std::string& path: include_paths ) {
+            if( file_path.find(path) != std::string::npos ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool TraverseDecl(clang::Decl* x) {
+        if( x->isImplicit() ) {
+            return true;
+        }
+
+        if( process_AST_node(x) || x->getKind() == clang::Decl::Kind::TranslationUnit ) {
+            return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseDecl(x);
+        } else {
+            return true;
+        }
+
+        return false;
+    }
 
 private:
     clang::ASTContext *Context;
