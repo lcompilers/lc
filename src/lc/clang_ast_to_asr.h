@@ -43,12 +43,13 @@ public:
     Vec<ASR::stmt_t*>* current_body;
     bool is_stmt_created;
     std::vector<std::map<std::string, std::string>> scopes;
+    std::string cxx_operator_name;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
         Context(Context_), al{al_}, tu{tu_},
         tmp{nullptr}, current_body{nullptr},
-        is_stmt_created{true} {}
+        is_stmt_created{true}, cxx_operator_name{""} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -357,6 +358,31 @@ public:
         return std::string(ASRUtils::symbol_name(callee_Var->m_v)) == "printf";
     }
 
+    bool TraverseCXXOperatorCallExpr(clang::CXXOperatorCallExpr* x) {
+        clang::Expr* callee = x->getCallee();
+        TraverseStmt(callee);
+        if( cxx_operator_name == "operator<<" ) {
+            clang::Expr** args = x->getArgs();
+            TraverseStmt(args[0]);
+            if( cxx_operator_name != "cout" ) {
+                throw std::runtime_error("Only cout is supported in operator<<.");
+            }
+            size_t n_args = x->getNumArgs();
+            Vec<ASR::expr_t*> print_args;
+            print_args.reserve(al, n_args);
+            for( size_t i = 1; i < n_args; i++ ) {
+                TraverseStmt(args[i]);
+                ASR::expr_t* arg = ASRUtils::EXPR(tmp);
+                print_args.push_back(al, arg);
+            }
+            tmp = ASR::make_Print_t(al, Lloc(x), print_args.p, print_args.size(), nullptr, nullptr);
+            is_stmt_created = true;
+        } else {
+            throw std::runtime_error("Only std::ostream operator is supported.");
+        }
+        return true;
+    }
+
     bool TraverseCallExpr(clang::CallExpr *x) {
         TraverseStmt(x->getCallee());
         ASR::expr_t* callee = ASRUtils::EXPR(tmp);
@@ -656,6 +682,10 @@ public:
 
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
+        if( name == "operator<<" || name == "cout" ) {
+            cxx_operator_name = name;
+            return true;
+        }
         ASR::symbol_t* sym = resolve_symbol(name);
         LCOMPILERS_ASSERT(sym != nullptr);
         tmp = ASR::make_Var_t(al, Lloc(x), sym);
