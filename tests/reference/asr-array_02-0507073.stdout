@@ -32,7 +32,7 @@
                                     ()
                                     ()
                                     Default
-                                    (Real 4)
+                                    (Real 8)
                                     ()
                                     Source
                                     Public
@@ -65,7 +65,7 @@
                             [((IntegerConstant 4 (Integer 4)))
                             ((IntegerConstant 10 (Integer 4)))
                             ((IntegerConstant 4 (Integer 4)))]
-                            (Real 4)
+                            (Real 8)
                             ()
                             ()
                         )
@@ -75,7 +75,7 @@
                         [(Cast
                             (Var 4 sum)
                             RealToReal
-                            (Real 4)
+                            (Real 8)
                             ()
                         )]
                         ()
@@ -144,7 +144,7 @@
                                     ()
                                     ()
                                     Default
-                                    (Real 4)
+                                    (Real 8)
                                     ()
                                     Source
                                     Public
@@ -161,7 +161,7 @@
                                     ()
                                     Default
                                     (Array
-                                        (Real 4)
+                                        (Real 8)
                                         [((IntegerConstant 0 (Integer 4))
                                         (Var 3 n))]
                                         PointerToDataArray
@@ -182,7 +182,7 @@
                                     ()
                                     Default
                                     (Array
-                                        (Real 4)
+                                        (Real 8)
                                         [((IntegerConstant 0 (Integer 4))
                                         (Var 3 nums))
                                         ((IntegerConstant 0 (Integer 4))
@@ -366,7 +366,7 @@
                                     ()
                                     ()
                                     Default
-                                    (Real 4)
+                                    (Real 8)
                                     ()
                                     Source
                                     Public
@@ -382,7 +382,7 @@
                                     ()
                                     ()
                                     Default
-                                    (Real 4)
+                                    (Real 8)
                                     ()
                                     Source
                                     Public
@@ -395,7 +395,7 @@
                         [(Integer 4)
                         (Integer 4)
                         (Integer 4)]
-                        (Real 4)
+                        (Real 8)
                         Source
                         Implementation
                         ()
@@ -465,7 +465,7 @@
                                         (()
                                         (Var 3 j)
                                         ())]
-                                        (Real 4)
+                                        (Real 8)
                                         RowMajor
                                         ()
                                     )
@@ -479,7 +479,7 @@
                                                 ()
                                             )
                                             IntegerToReal
-                                            (Real 4)
+                                            (Real 8)
                                             ()
                                         )
                                         Div
@@ -492,10 +492,10 @@
                                                 ()
                                             )
                                             IntegerToReal
-                                            (Real 4)
+                                            (Real 8)
                                             ()
                                         )
-                                        (Real 4)
+                                        (Real 8)
                                         ()
                                     )
                                     ()
@@ -556,7 +556,7 @@
                                 [(()
                                 (Var 3 k)
                                 ())]
-                                (Real 4)
+                                (Real 8)
                                 RowMajor
                                 ()
                             )
@@ -564,17 +564,17 @@
                                 (Cast
                                     (Var 3 k)
                                     IntegerToReal
-                                    (Real 4)
+                                    (Real 8)
                                     ()
                                 )
                                 Div
                                 (Cast
                                     (Var 3 n)
                                     IntegerToReal
-                                    (Real 4)
+                                    (Real 8)
                                     ()
                                 )
-                                (Real 4)
+                                (Real 8)
                                 ()
                             )
                             ()
@@ -599,7 +599,7 @@
                                 (Real 8)
                             )
                             RealToReal
-                            (Real 4)
+                            (Real 8)
                             ()
                         )
                         ()
@@ -640,7 +640,7 @@
                                         (Real 8)
                                     )
                                     RealToReal
-                                    (Real 4)
+                                    (Real 8)
                                     ()
                                 )
                                 ()
@@ -676,7 +676,7 @@
                                                 (()
                                                 (Var 3 j1)
                                                 ())]
-                                                (Real 4)
+                                                (Real 8)
                                                 RowMajor
                                                 ()
                                             )
@@ -686,14 +686,14 @@
                                                 [(()
                                                 (Var 3 j1)
                                                 ())]
-                                                (Real 4)
+                                                (Real 8)
                                                 RowMajor
                                                 ()
                                             )
-                                            (Real 4)
+                                            (Real 8)
                                             ()
                                         )
-                                        (Real 4)
+                                        (Real 8)
                                         ()
                                     )
                                     ()
@@ -716,7 +716,7 @@
                                     (Var 3 sum)
                                     Add
                                     (Var 3 output)
-                                    (Real 4)
+                                    (Real 8)
                                     ()
                                 )
                                 ()

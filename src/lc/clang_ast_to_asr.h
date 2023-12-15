@@ -43,12 +43,15 @@ public:
     Vec<ASR::stmt_t*>* current_body;
     bool is_stmt_created;
     std::vector<std::map<std::string, std::string>> scopes;
+    std::string cxx_operator_name;
+    ASR::expr_t* assignment_target;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
         Context(Context_), al{al_}, tu{tu_},
         tmp{nullptr}, current_body{nullptr},
-        is_stmt_created{true} {}
+        is_stmt_created{true}, cxx_operator_name{""},
+        assignment_target{nullptr} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -56,6 +59,17 @@ public:
         l.first = Context->getFullLoc(x->getBeginLoc()).getFileOffset();
         l.last = Context->getFullLoc(x->getEndLoc()).getFileOffset();
         return l;
+    }
+
+    template <typename T>
+    std::string get_file_name(T* x) {
+        clang::SourceLocation loc = x->getLocation();
+        if( loc.isInvalid() ) {
+            return "";
+        }
+
+        clang::FullSourceLoc full_source_loc = Context->getFullLoc(loc);
+        return std::string(full_source_loc.getPresumedLoc().getFilename());
     }
 
     template <typename T>
@@ -190,7 +204,7 @@ public:
         } else if( clang_type->isIntegerType() ) {
             type = ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
         } else if( clang_type->isFloatingType() ) {
-            type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 4));
+            type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 8));
         } else if( clang_type->isPointerType() ) {
             type = ClangTypeToASRType(qual_type->getPointeeType());
             if( !ASRUtils::is_character(*type) ) {
@@ -228,6 +242,42 @@ public:
             vec.push_back(al, dim);
             type = ASRUtils::make_Array_t_util(al, l, type, vec.p, vec.size());
             type = flatten_Array(type);
+        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Elaborated ) {
+            const clang::ElaboratedType* elaborated_type = clang_type->getAs<clang::ElaboratedType>();
+            clang::QualType desugared_type = elaborated_type->desugar();
+            type = ClangTypeToASRType(desugared_type);
+        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::TemplateSpecialization ) {
+            const clang::TemplateSpecializationType* template_specialization = clang_type->getAs<clang::TemplateSpecializationType>();
+            std::string template_name = template_specialization->getTemplateName().getAsTemplateDecl()->getNameAsString();
+            if( template_name == "xtensor" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( template_arguments.size() != 2 ) {
+                    throw std::runtime_error("xtensor type must be initialised with element type and rank.");
+                }
+                const clang::QualType& qual_type = template_arguments.at(0).getAsType();
+                clang::Expr* clang_rank = template_arguments.at(1).getAsExpr();
+                TraverseStmt(clang_rank);
+                int rank = 0;
+                if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp), rank) ) {
+                    throw std::runtime_error("Rank provided in the xtensor initialisation must be a constant.");
+                }
+                tmp = nullptr;
+                Vec<ASR::dimension_t> empty_dims; empty_dims.reserve(al, rank);
+                for( int dim = 0; dim < rank; dim++ ) {
+                    ASR::dimension_t empty_dim;
+                    empty_dim.loc = l;
+                    empty_dim.m_start = nullptr;
+                    empty_dim.m_length = nullptr;
+                    empty_dims.push_back(al, empty_dim);
+                }
+                type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
+                    ClangTypeToASRType(qual_type),
+                    empty_dims.p, empty_dims.size(),
+                    ASR::array_physical_typeType::DescriptorArray));
+                type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, l, type));
+            } else {
+                throw std::runtime_error(std::string("Unrecognized type ") + template_name);
+            }
         } else {
             throw std::runtime_error("clang::QualType not yet supported " +
                 std::string(clang_type->getTypeClassName()));
@@ -306,6 +356,31 @@ public:
     bool check_printf(ASR::expr_t* callee) {
         ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
         return std::string(ASRUtils::symbol_name(callee_Var->m_v)) == "printf";
+    }
+
+    bool TraverseCXXOperatorCallExpr(clang::CXXOperatorCallExpr* x) {
+        clang::Expr* callee = x->getCallee();
+        TraverseStmt(callee);
+        if( cxx_operator_name == "operator<<" ) {
+            clang::Expr** args = x->getArgs();
+            TraverseStmt(args[0]);
+            if( cxx_operator_name != "cout" ) {
+                throw std::runtime_error("Only cout is supported in operator<<.");
+            }
+            size_t n_args = x->getNumArgs();
+            Vec<ASR::expr_t*> print_args;
+            print_args.reserve(al, n_args);
+            for( size_t i = 1; i < n_args; i++ ) {
+                TraverseStmt(args[i]);
+                ASR::expr_t* arg = ASRUtils::EXPR(tmp);
+                print_args.push_back(al, arg);
+            }
+            tmp = ASR::make_Print_t(al, Lloc(x), print_args.p, print_args.size(), nullptr, nullptr);
+            is_stmt_created = true;
+        } else {
+            throw std::runtime_error("Only std::ostream operator is supported.");
+        }
+        return true;
     }
 
     bool TraverseCallExpr(clang::CallExpr *x) {
@@ -398,6 +473,14 @@ public:
         return true;
     }
 
+    bool TraverseCXXConstructExpr(clang::CXXConstructExpr* x) {
+        if( x->getNumArgs() >= 0 ) {
+            return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseCXXConstructExpr(x);
+        }
+        tmp = nullptr;
+        return true;
+    }
+
     bool TraverseVarDecl(clang::VarDecl *x) {
         std::string name = x->getName().str();
         if( scopes.size() > 0 ) {
@@ -421,11 +504,16 @@ public:
         current_scope->add_symbol(name, v);
         is_stmt_created = false;
         if (x->hasInit()) {
-            TraverseStmt(x->getInit());
-            ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
+            tmp = nullptr;
             ASR::expr_t* var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), v));
-            tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
-            is_stmt_created = true;
+            assignment_target = var;
+            TraverseStmt(x->getInit());
+            assignment_target = nullptr;
+            if( tmp != nullptr ) {
+                ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
+                tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
+                is_stmt_created = true;
+            }
         }
         return true;
     }
@@ -465,6 +553,44 @@ public:
         array_constant_t->m_type = new_type;
     }
 
+    bool extract_dimensions_from_array_type(ASR::ttype_t* array_type,
+        Vec<ASR::dimension_t>& alloc_dims) {
+        if( !ASRUtils::is_array(array_type) ) {
+            return false;
+        }
+
+        ASR::Array_t* array_t = ASR::down_cast<ASR::Array_t>(
+            ASRUtils::type_get_past_allocatable(
+                ASRUtils::type_get_past_pointer(
+                    ASRUtils::type_get_past_const(array_type))));
+        for( int i = 0; i < array_t->n_dims; i++ ) {
+            alloc_dims.push_back(al, array_t->m_dims[i]);
+        }
+
+        extract_dimensions_from_array_type(array_t->m_type, alloc_dims);
+        return true;
+    }
+
+    void create_allocate_stmt(ASR::expr_t* var, ASR::ttype_t* array_type) {
+        if( var == nullptr || !ASRUtils::is_allocatable(var) ) {
+            return ;
+        }
+
+        const Location& loc = var->base.loc;
+        Vec<ASR::dimension_t> alloc_dims; alloc_dims.reserve(al, 1);
+        if( extract_dimensions_from_array_type(array_type, alloc_dims) ) {
+            Vec<ASR::alloc_arg_t> alloc_args; alloc_args.reserve(al, 1);
+            ASR::alloc_arg_t alloc_arg; alloc_arg.loc = loc;
+            alloc_arg.m_a = var;
+            alloc_arg.m_dims = alloc_dims.p; alloc_arg.n_dims = alloc_dims.size();
+            alloc_arg.m_type = nullptr; alloc_arg.m_len_expr = nullptr;
+            alloc_args.push_back(al, alloc_arg);
+            ASR::stmt_t* allocate_stmt = ASRUtils::STMT(ASR::make_Allocate_t(al, loc,
+                alloc_args.p, alloc_args.size(), nullptr, nullptr, nullptr));
+            current_body->push_back(al, allocate_stmt);
+        }
+    }
+
     bool TraverseInitListExpr(clang::InitListExpr* x) {
         Vec<ASR::expr_t*> init_exprs;
         init_exprs.reserve(al, x->getNumInits());
@@ -485,6 +611,7 @@ public:
             type, dims.p, dims.size(), ASR::array_physical_typeType::FixedSizeArray));
         ASR::expr_t* array_constant = ASRUtils::EXPR(ASR::make_ArrayConstant_t(al, Lloc(x),
             init_exprs.p, init_exprs.size(), type, ASR::arraystorageType::RowMajor));
+        create_allocate_stmt(assignment_target, type);
         flatten_ArrayConstant(array_constant);
         tmp = (ASR::asr_t*) array_constant;
         return true;
@@ -596,6 +723,10 @@ public:
 
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
+        if( name == "operator<<" || name == "cout" ) {
+            cxx_operator_name = name;
+            return true;
+        }
         ASR::symbol_t* sym = resolve_symbol(name);
         LCOMPILERS_ASSERT(sym != nullptr);
         tmp = ASR::make_Var_t(al, Lloc(x), sym);
@@ -754,6 +885,45 @@ public:
         return true;
     }
 
+    template <typename T>
+    bool process_AST_node(T* x) {
+        std::string file_path = get_file_name(x);
+        if( file_path.size() == 0 ) {
+            return false;
+        }
+
+        std::vector<std::string> include_paths = {
+            "include/c++/v1",
+            "include/stddef.h",
+            "include/__stddef_max_align_t.h",
+            "usr/include",
+            "mambaforge/envs",
+            "lib/gcc",
+            "lib/clang",
+            "micromamba-root/envs"
+        };
+        for( std::string& path: include_paths ) {
+            if( file_path.find(path) != std::string::npos ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool TraverseDecl(clang::Decl* x) {
+        if( x->isImplicit() ) {
+            return true;
+        }
+
+        if( process_AST_node(x) || x->getKind() == clang::Decl::Kind::TranslationUnit ) {
+            return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseDecl(x);
+        } else {
+            return true;
+        }
+
+        return false;
+    }
 
 private:
     clang::ASTContext *Context;
