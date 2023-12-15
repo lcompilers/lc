@@ -44,12 +44,14 @@ public:
     bool is_stmt_created;
     std::vector<std::map<std::string, std::string>> scopes;
     std::string cxx_operator_name;
+    ASR::expr_t* assignment_target;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
         Context(Context_), al{al_}, tu{tu_},
         tmp{nullptr}, current_body{nullptr},
-        is_stmt_created{true}, cxx_operator_name{""} {}
+        is_stmt_created{true}, cxx_operator_name{""},
+        assignment_target{nullptr} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -201,10 +203,8 @@ public:
             type = ASRUtils::TYPE(ASR::make_Character_t(al, l, 1, -1, nullptr));
         } else if( clang_type->isIntegerType() ) {
             type = ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
-        } else if( clang_type->isRealFloatingType() ) {
-            type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 8));
         } else if( clang_type->isFloatingType() ) {
-            type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 4));
+            type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 8));
         } else if( clang_type->isPointerType() ) {
             type = ClangTypeToASRType(qual_type->getPointeeType());
             if( !ASRUtils::is_character(*type) ) {
@@ -505,10 +505,12 @@ public:
         is_stmt_created = false;
         if (x->hasInit()) {
             tmp = nullptr;
+            ASR::expr_t* var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), v));
+            assignment_target = var;
             TraverseStmt(x->getInit());
+            assignment_target = nullptr;
             if( tmp != nullptr ) {
                 ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
-                ASR::expr_t* var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), v));
                 tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
                 is_stmt_created = true;
             }
@@ -551,6 +553,44 @@ public:
         array_constant_t->m_type = new_type;
     }
 
+    bool extract_dimensions_from_array_type(ASR::ttype_t* array_type,
+        Vec<ASR::dimension_t>& alloc_dims) {
+        if( !ASRUtils::is_array(array_type) ) {
+            return false;
+        }
+
+        ASR::Array_t* array_t = ASR::down_cast<ASR::Array_t>(
+            ASRUtils::type_get_past_allocatable(
+                ASRUtils::type_get_past_pointer(
+                    ASRUtils::type_get_past_const(array_type))));
+        for( int i = 0; i < array_t->n_dims; i++ ) {
+            alloc_dims.push_back(al, array_t->m_dims[i]);
+        }
+
+        extract_dimensions_from_array_type(array_t->m_type, alloc_dims);
+        return true;
+    }
+
+    void create_allocate_stmt(ASR::expr_t* var, ASR::ttype_t* array_type) {
+        if( var == nullptr || !ASRUtils::is_allocatable(var) ) {
+            return ;
+        }
+
+        const Location& loc = var->base.loc;
+        Vec<ASR::dimension_t> alloc_dims; alloc_dims.reserve(al, 1);
+        if( extract_dimensions_from_array_type(array_type, alloc_dims) ) {
+            Vec<ASR::alloc_arg_t> alloc_args; alloc_args.reserve(al, 1);
+            ASR::alloc_arg_t alloc_arg; alloc_arg.loc = loc;
+            alloc_arg.m_a = var;
+            alloc_arg.m_dims = alloc_dims.p; alloc_arg.n_dims = alloc_dims.size();
+            alloc_arg.m_type = nullptr; alloc_arg.m_len_expr = nullptr;
+            alloc_args.push_back(al, alloc_arg);
+            ASR::stmt_t* allocate_stmt = ASRUtils::STMT(ASR::make_Allocate_t(al, loc,
+                alloc_args.p, alloc_args.size(), nullptr, nullptr, nullptr));
+            current_body->push_back(al, allocate_stmt);
+        }
+    }
+
     bool TraverseInitListExpr(clang::InitListExpr* x) {
         Vec<ASR::expr_t*> init_exprs;
         init_exprs.reserve(al, x->getNumInits());
@@ -571,6 +611,7 @@ public:
             type, dims.p, dims.size(), ASR::array_physical_typeType::FixedSizeArray));
         ASR::expr_t* array_constant = ASRUtils::EXPR(ASR::make_ArrayConstant_t(al, Lloc(x),
             init_exprs.p, init_exprs.size(), type, ASR::arraystorageType::RowMajor));
+        create_allocate_stmt(assignment_target, type);
         flatten_ArrayConstant(array_constant);
         tmp = (ASR::asr_t*) array_constant;
         return true;
