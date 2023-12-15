@@ -67,7 +67,7 @@ jobs:
 
             lc tests/array_02.cpp --backend=llvm --extra-arg="-Isrc/runtime/include" --
 
-            lc tests/array_03.cpp --backend=llvm --
+            lc tests/array_03.cpp --backend=llvm --extra-arg="-I$CONDA_PREFIX/include" --
 
             # Test generating object files
             lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" -o c_o -c --
