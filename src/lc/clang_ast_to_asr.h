@@ -200,6 +200,8 @@ public:
             type = ASRUtils::TYPE(ASR::make_Character_t(al, l, 1, -1, nullptr));
         } else if( clang_type->isIntegerType() ) {
             type = ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
+        } else if( clang_type->isRealFloatingType() ) {
+            type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 8));
         } else if( clang_type->isFloatingType() ) {
             type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 4));
         } else if( clang_type->isPointerType() ) {
@@ -239,6 +241,42 @@ public:
             vec.push_back(al, dim);
             type = ASRUtils::make_Array_t_util(al, l, type, vec.p, vec.size());
             type = flatten_Array(type);
+        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Elaborated ) {
+            const clang::ElaboratedType* elaborated_type = clang_type->getAs<clang::ElaboratedType>();
+            clang::QualType desugared_type = elaborated_type->desugar();
+            type = ClangTypeToASRType(desugared_type);
+        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::TemplateSpecialization ) {
+            const clang::TemplateSpecializationType* template_specialization = clang_type->getAs<clang::TemplateSpecializationType>();
+            std::string template_name = template_specialization->getTemplateName().getAsTemplateDecl()->getNameAsString();
+            if( template_name == "xtensor" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( template_arguments.size() != 2 ) {
+                    throw std::runtime_error("xtensor type must be initialised with element type and rank.");
+                }
+                const clang::QualType& qual_type = template_arguments.at(0).getAsType();
+                clang::Expr* clang_rank = template_arguments.at(1).getAsExpr();
+                TraverseStmt(clang_rank);
+                int rank = 0;
+                if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp), rank) ) {
+                    throw std::runtime_error("Rank provided in the xtensor initialisation must be a constant.");
+                }
+                tmp = nullptr;
+                Vec<ASR::dimension_t> empty_dims; empty_dims.reserve(al, rank);
+                for( int dim = 0; dim < rank; dim++ ) {
+                    ASR::dimension_t empty_dim;
+                    empty_dim.loc = l;
+                    empty_dim.m_start = nullptr;
+                    empty_dim.m_length = nullptr;
+                    empty_dims.push_back(al, empty_dim);
+                }
+                type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
+                    ClangTypeToASRType(qual_type),
+                    empty_dims.p, empty_dims.size(),
+                    ASR::array_physical_typeType::DescriptorArray));
+                type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, l, type));
+            } else {
+                throw std::runtime_error(std::string("Unrecognized type ") + template_name);
+            }
         } else {
             throw std::runtime_error("clang::QualType not yet supported " +
                 std::string(clang_type->getTypeClassName()));
@@ -409,6 +447,14 @@ public:
         return true;
     }
 
+    bool TraverseCXXConstructExpr(clang::CXXConstructExpr* x) {
+        if( x->getNumArgs() >= 0 ) {
+            return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseCXXConstructExpr(x);
+        }
+        tmp = nullptr;
+        return true;
+    }
+
     bool TraverseVarDecl(clang::VarDecl *x) {
         std::string name = x->getName().str();
         if( scopes.size() > 0 ) {
@@ -432,11 +478,14 @@ public:
         current_scope->add_symbol(name, v);
         is_stmt_created = false;
         if (x->hasInit()) {
+            tmp = nullptr;
             TraverseStmt(x->getInit());
-            ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
-            ASR::expr_t* var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), v));
-            tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
-            is_stmt_created = true;
+            if( tmp != nullptr ) {
+                ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
+                ASR::expr_t* var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), v));
+                tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
+                is_stmt_created = true;
+            }
         }
         return true;
     }
