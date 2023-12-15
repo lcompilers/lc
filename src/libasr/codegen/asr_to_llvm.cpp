@@ -9231,6 +9231,7 @@ Result<std::unique_ptr<LLVMModule>> asr_to_llvm(ASR::TranslationUnit_t &asr,
         v.module->print(os, nullptr);
         std::cout << os.str();
         msg = "asr_to_llvm: module failed verification. Error:\n" + err.str();
+        std::cout << msg << std::endl;
         diagnostics.diagnostics.push_back(diag::Diagnostic(msg,
             diag::Level::Error, diag::Stage::CodeGen));
         Error error;
