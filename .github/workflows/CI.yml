@@ -41,6 +41,13 @@ jobs:
             ./build.sh
             export PATH=$CONDA_PREFIX/bin:$PATH
 
+      - name: Print runtime library directory
+        shell: bash -l {0}
+        if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
+        run: |
+            lc --get-rtl-header-dir --
+            lc --get-rtl-dir --
+
       - name: Test (Linux / macOS)
         shell: bash -l -e {0}
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
