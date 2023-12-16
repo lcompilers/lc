@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
-project(lc C)
+project(lc C CXX)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug
@@ -87,8 +87,8 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
                 OR (LC_BACKEND STREQUAL "c") OR (LC_BACKEND STREQUAL "fortran"))
             add_custom_command(
                 OUTPUT ${name}.o
-                COMMAND ${LC} -c ${extra_args} ${CMAKE_CURRENT_SOURCE_DIR}/${file_name}.c -o ${name}.o --extra-arg -I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include --
-                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${file_name}.c
+                COMMAND ${LC} -c ${extra_args} ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}.o --extra-arg -I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include --
+                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${file_name}
                 VERBATIM)
             add_executable(${name} ${name}.o ${extra_files})
             set_target_properties(${name} PROPERTIES LINKER_LANGUAGE C)
@@ -96,7 +96,7 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
             add_test(${name} ${CURRENT_BINARY_DIR}/${name})
         elseif (LC_BACKEND STREQUAL "wasm")
             # wasm test
-            execute_process(COMMAND ${LC} ${extra_args} --backend=wasm ${CMAKE_CURRENT_SOURCE_DIR}/${file_name}.c -o ${name}
+            execute_process(COMMAND ${LC} ${extra_args} --backend=wasm ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}
                 --extra-arg -I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include --)
             find_program(WASM_EXEC_RUNTIME node)
             execute_process(COMMAND "${WASM_EXEC_RUNTIME}" --version
@@ -112,7 +112,7 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
             set(WASM_EXEC_FLAGS ${WASM_EXEC_FLAGS} "--experimental-wasi-unstable-preview1")
             add_test(${name} ${WASM_EXEC_RUNTIME} ${WASM_EXEC_FLAGS} ${CURRENT_BINARY_DIR}/${name}.js)
         else ()
-            add_executable(${name} ${file_name}.c ${extra_files})
+            add_executable(${name} ${file_name} ${extra_files})
             target_compile_options(${name} PUBLIC ${gcc_args})
             add_test(${name} ${CURRENT_BINARY_DIR}/${name})
         endif()
