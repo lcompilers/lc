@@ -76,6 +76,12 @@ static cl::opt<bool>
 static cl::opt<std::string>
     ArgBackend("backend",
     cl::desc("Select a backend (llvm, wasm, c, cpp, fortran)"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    GetRtlHeaderDir("get-rtl-header-dir",
+    cl::desc("Print the path to the runtime library header file"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    GetRtlDir("get-rtl-dir",
+    cl::desc("Print the path to the runtime library file"), cl::cat(ClangCheckCategory));
 
 enum class Backend {
     llvm, wasm, c, cpp, x86, fortran
@@ -692,9 +698,28 @@ int link_executable(const std::vector<std::string> &infiles,
     return 0;
 }
 
+void do_print_rtl_header_dir() {
+    std::string rtl_header_dir = LCompilers::LC::get_runtime_library_header_dir();
+    std::cout << rtl_header_dir << std::endl;
+}
+
+void do_print_rtl_dir() {
+    std::string rtl_dir = LCompilers::LC::get_runtime_library_dir();
+    std::cout << rtl_dir << std::endl;
+}
+
 int main(int argc, const char **argv) {
     auto ExpectedParser = CommonOptionsParser::create(argc, argv, ClangCheckCategory);
     if (!ExpectedParser) {
+        if (GetRtlHeaderDir) {
+            do_print_rtl_header_dir();
+            return 0;
+        }
+
+        if (GetRtlDir) {
+            do_print_rtl_dir();
+            return 0;
+        }
         llvm::errs() << ExpectedParser.takeError();
         return 1;
     }
