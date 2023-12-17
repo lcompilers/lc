@@ -24,11 +24,11 @@ llvm = true
 fortran = true
 
 [[test]]
-filename = "array_01.cpp"
+filename = "../integration_tests/array_01.cpp"
 extra_arg = "-Isrc/runtime/include"
 asr = true
 
 [[test]]
-filename = "array_02.cpp"
+filename = "../integration_tests/array_02.cpp"
 extra_arg = "-Isrc/runtime/include"
 asr = true

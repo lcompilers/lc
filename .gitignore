@@ -31,6 +31,7 @@ fa
 fa2
 */bin/lc
 *vscode*
+integration_tests/test-*
 
 ## Byte-compiled / optimized / DLL files
 __pycache__/
