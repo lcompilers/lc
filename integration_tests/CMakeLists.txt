@@ -177,6 +177,7 @@ endmacro(RUN)
 # wasm          --- compile to WASM binary directly
 
 RUN(NAME expr1.c LABELS gcc c wasm llvm NOFAST)
+RUN(NAME expr2.c LABELS gcc c wasm llvm NOFAST)
 
 # arrays
 RUN(NAME array_01.cpp LABELS gcc llvm NOFAST)
