@@ -414,6 +414,7 @@ public:
                 callee_sym, call_args.p, call_args.size(), ClangTypeToASRType(qual_type),
                 nullptr, nullptr);
         }
+        is_stmt_created = true;
         return true;
     }
 
