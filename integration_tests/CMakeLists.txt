@@ -87,7 +87,7 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
                 OR (LC_BACKEND STREQUAL "c") OR (LC_BACKEND STREQUAL "fortran"))
             add_custom_command(
                 OUTPUT ${name}.o
-                COMMAND ${LC} -c ${extra_args} ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}.o --extra-arg -I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include --
+                COMMAND ${LC} -c ${extra_args} ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}.o --extra-arg-before -I$CONDA_PREFIX/include --extra-arg -I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include --
                 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${file_name}
                 VERBATIM)
             add_executable(${name} ${name}.o ${extra_files})
@@ -183,3 +183,4 @@ RUN(NAME expr3.c FAIL LABELS gcc c wasm llvm NOFAST)
 # arrays
 RUN(NAME array_01.cpp LABELS gcc llvm NOFAST)
 RUN(NAME array_02.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_03.cpp LABELS gcc llvm NOFAST)
