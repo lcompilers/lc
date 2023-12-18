@@ -31,6 +31,16 @@
 
 namespace LCompilers {
 
+enum SpecialFunc {
+    Printf,
+    Exit
+};
+
+std::map<std::string, SpecialFunc> special_function_map = {
+    {"printf", SpecialFunc::Printf},
+    {"exit", SpecialFunc::Exit}
+};
+
 class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
 
 public:
@@ -140,6 +150,16 @@ public:
         tu->m_symtab->add_symbol(prog_name, ASR::down_cast<ASR::symbol_t>(prog));
     }
 
+    void remove_special_functions() {
+        ASR::TranslationUnit_t* tu = (ASR::TranslationUnit_t*)this->tu;
+        if (tu->m_symtab->resolve_symbol("printf")) {
+            tu->m_symtab->erase_symbol("printf");
+        }
+        if (tu->m_symtab->resolve_symbol("exit")) {
+            tu->m_symtab->erase_symbol("exit");
+        }
+    }
+
     bool TraverseTranslationUnitDecl(clang::TranslationUnitDecl *x) {
         SymbolTable *parent_scope = al.make_new<SymbolTable>(nullptr);
         current_scope = parent_scope;
@@ -151,8 +171,7 @@ public:
         }
 
         construct_program();
-        // remove printf definition
-        ((ASR::TranslationUnit_t*)tu)->m_symtab->erase_symbol("printf");
+        remove_special_functions();
 
         return true;
     }
@@ -339,27 +358,6 @@ public:
         return true;
     }
 
-    void handle_printf(clang::CallExpr *x) {
-        Vec<ASR::expr_t*> args;
-        args.reserve(al, 1);
-        bool skip_format_str = true;
-        for (auto *p : x->arguments()) {
-            TraverseStmt(p);
-            if (skip_format_str) {
-                skip_format_str = false;
-                continue;
-            }
-            args.push_back(al, ASRUtils::EXPR(tmp));
-        }
-        tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
-        is_stmt_created = true;
-    }
-
-    bool check_printf(ASR::expr_t* callee) {
-        ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
-        return std::string(ASRUtils::symbol_name(callee_Var->m_v)) == "printf";
-    }
-
     bool TraverseCXXOperatorCallExpr(clang::CXXOperatorCallExpr* x) {
         clang::Expr* callee = x->getCallee();
         TraverseStmt(callee);
@@ -385,11 +383,41 @@ public:
         return true;
     }
 
+    bool check_and_handle_special_function(
+        clang::CallExpr *x, ASR::expr_t* callee) {
+        ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
+        std::string func_name = std::string(ASRUtils::symbol_name(callee_Var->m_v));
+        if (special_function_map.find(func_name) == special_function_map.end()) {
+            return false;
+        }
+        SpecialFunc sf = special_function_map[func_name];
+        Vec<ASR::expr_t*> args;
+        args.reserve(al, 1);
+        bool skip_format_str = true;
+        for (auto *p : x->arguments()) {
+            TraverseStmt(p);
+            if (sf == SpecialFunc::Printf && skip_format_str) {
+                skip_format_str = false;
+                continue;
+            }
+            args.push_back(al, ASRUtils::EXPR(tmp));
+        }
+        if (sf == SpecialFunc::Printf) {
+            tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
+        } else if (sf == SpecialFunc::Exit) {
+            LCOMPILERS_ASSERT(args.size() == 1);
+            tmp = ASR::make_Stop_t(al, Lloc(x), args[0]);
+        } else {
+            throw std::runtime_error("Only printf and exit special functions supported");
+        }
+        is_stmt_created = true;
+        return true;
+    }
+
     bool TraverseCallExpr(clang::CallExpr *x) {
         TraverseStmt(x->getCallee());
         ASR::expr_t* callee = ASRUtils::EXPR(tmp);
-        if( check_printf(callee) ) {
-            handle_printf(x);
+        if( check_and_handle_special_function(x, callee) ) {
             return true;
         }
 
