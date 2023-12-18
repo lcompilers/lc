@@ -527,7 +527,9 @@ public:
         ASR::dimension_t *expr_dims = nullptr, *target_expr_dims = nullptr;
         size_t expr_rank = ASRUtils::extract_dimensions_from_ttype(expr_type, expr_dims);
         size_t target_expr_rank = ASRUtils::extract_dimensions_from_ttype(target_expr_type, target_expr_dims);
-        if( expr_rank == target_expr_rank ) {
+        if( expr_rank == target_expr_rank ||
+            ASRUtils::extract_physical_type(target_expr_type) ==
+                ASR::array_physical_typeType::FixedSizeArray ) {
             return ;
         }
 
