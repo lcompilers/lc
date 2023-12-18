@@ -115,4 +115,4 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
                  filename, update_reference, extra_args)
 
 if __name__ == "__main__":
-    tester_main("LC", single_test)
+    tester_main("LC", single_test, True)
