@@ -199,7 +199,9 @@ public:
         const clang::Qualifiers qualifiers = split_qual_type.asPair().second;
         Location l; l.first = 1, l.last = 1;
         ASR::ttype_t* type = nullptr;
-        if( clang_type->isCharType() ) {
+        if (clang_type->isVoidType() ) {
+            // do nothing
+        } else if( clang_type->isCharType() ) {
             type = ASRUtils::TYPE(ASR::make_Character_t(al, l, 1, -1, nullptr));
         } else if( clang_type->isIntegerType() ) {
             type = ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
@@ -406,14 +408,18 @@ public:
 
         ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
         ASR::symbol_t* callee_sym = callee_Var->m_v;
-        if( x->getCallReturnType(*Context).split().asPair().first->isVoidType() ) {
-            throw std::runtime_error("Void return type not yet supported.");
+        const clang::QualType& qual_type = x->getCallReturnType(*Context);
+        ASR::ttype_t* return_type = ClangTypeToASRType(qual_type);
+        if( return_type == nullptr ) {
+            tmp = ASRUtils::make_SubroutineCall_t_util(al, Lloc(x), callee_sym,
+                callee_sym, call_args.p, call_args.size(), nullptr,
+                nullptr, false);
         } else {
-            const clang::QualType& qual_type = x->getCallReturnType(*Context);
             tmp = ASRUtils::make_FunctionCall_t_util(al, Lloc(x), callee_sym,
-                callee_sym, call_args.p, call_args.size(), ClangTypeToASRType(qual_type),
+                callee_sym, call_args.p, call_args.size(), return_type,
                 nullptr, nullptr);
         }
+        is_stmt_created = true;
         return true;
     }
 
@@ -432,11 +438,15 @@ public:
         }
 
         ASR::ttype_t* return_type = ClangTypeToASRType(x->getReturnType());
-        ASR::symbol_t* return_sym = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
-            current_scope, s2c(al, "__return_var"), nullptr, 0, ASR::intentType::ReturnVar, nullptr, nullptr,
-            ASR::storage_typeType::Default, return_type, nullptr, ASR::abiType::Source, ASR::accessType::Public,
-            ASR::presenceType::Required, false));
-        current_scope->add_symbol("__return_var", return_sym);
+        ASR::symbol_t* return_sym = nullptr;
+        ASR::expr_t* return_var = nullptr;
+        if (return_type != nullptr) {
+            return_sym = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
+                current_scope, s2c(al, "__return_var"), nullptr, 0, ASR::intentType::ReturnVar, nullptr, nullptr,
+                ASR::storage_typeType::Default, return_type, nullptr, ASR::abiType::Source, ASR::accessType::Public,
+                ASR::presenceType::Required, false));
+            current_scope->add_symbol("__return_var", return_sym);
+        }
 
         Vec<ASR::stmt_t*>* current_body_copy = current_body;
         Vec<ASR::stmt_t*> body; body.reserve(al, 1);
@@ -446,7 +456,9 @@ public:
         }
         current_body = current_body_copy;
 
-        ASR::expr_t* return_var = ASRUtils::EXPR(ASR::make_Var_t(al, return_sym->base.loc, return_sym));
+        if (return_type != nullptr) {
+            return_var = ASRUtils::EXPR(ASR::make_Var_t(al, return_sym->base.loc, return_sym));
+        }
         tmp = ASRUtils::make_Function_t_util(al, Lloc(x), current_scope, s2c(al, name), nullptr, 0,
             args.p, args.size(), body.p, body.size(), return_var, ASR::abiType::Source, ASR::accessType::Public,
             ASR::deftypeType::Implementation, nullptr, false, false, false, false, false, nullptr, 0,
