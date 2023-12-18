@@ -85,7 +85,7 @@ def main():
 
     # Setup
     global NO_OF_THREADS, fast_tests
-    os.environ["PATH"] += os.pathsep + LC_PATH
+    # os.environ["PATH"] += os.pathsep + LC_PATH
     # delete previously created directories (if any)
     for backend in SUPPORTED_BACKENDS:
         run_cmd(f"rm -rf {BASE_DIR}/test-{backend}")

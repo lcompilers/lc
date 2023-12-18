@@ -521,6 +521,41 @@ public:
         return true;
     }
 
+    void add_reshape_if_needed(ASR::expr_t*& expr, ASR::expr_t* target_expr) {
+        ASR::ttype_t* expr_type = ASRUtils::expr_type(expr);
+        ASR::ttype_t* target_expr_type = ASRUtils::expr_type(target_expr);
+        ASR::dimension_t *expr_dims = nullptr, *target_expr_dims = nullptr;
+        size_t expr_rank = ASRUtils::extract_dimensions_from_ttype(expr_type, expr_dims);
+        size_t target_expr_rank = ASRUtils::extract_dimensions_from_ttype(target_expr_type, target_expr_dims);
+        if( expr_rank == target_expr_rank ||
+            ASRUtils::extract_physical_type(target_expr_type) ==
+                ASR::array_physical_typeType::FixedSizeArray ) {
+            return ;
+        }
+
+        const Location& loc = expr->base.loc;
+        Vec<ASR::expr_t*> new_shape_; new_shape_.reserve(al, target_expr_rank);
+        for( size_t i = 0; i < target_expr_rank; i++ ) {
+            new_shape_.push_back(al, ASRUtils::get_size(target_expr, i + 1, al));
+        }
+
+        Vec<ASR::dimension_t> new_shape_dims; new_shape_dims.reserve(al, 1);
+        ASR::dimension_t new_shape_dim; new_shape_dim.loc = loc;
+        new_shape_dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, loc,
+            target_expr_rank, ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4))));
+        new_shape_dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, loc,
+            0, ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4))));
+        new_shape_dims.push_back(al, new_shape_dim);
+        ASR::ttype_t* new_shape_type = ASRUtils::TYPE(ASR::make_Array_t(al, loc,
+            ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4)), new_shape_dims.p,
+            new_shape_dims.size(), ASR::array_physical_typeType::FixedSizeArray));
+        ASR::expr_t* new_shape = ASRUtils::EXPR(ASR::make_ArrayConstant_t(al, loc,
+            new_shape_.p, new_shape_.size(), new_shape_type, ASR::arraystorageType::RowMajor));
+        ASR::expr_t* reshaped_expr = ASRUtils::EXPR(ASR::make_ArrayReshape_t(al, loc, expr,
+            new_shape, target_expr_type, nullptr));
+        expr = reshaped_expr;
+    }
+
     bool TraverseVarDecl(clang::VarDecl *x) {
         std::string name = x->getName().str();
         if( scopes.size() > 0 ) {
@@ -551,6 +586,7 @@ public:
             assignment_target = nullptr;
             if( tmp != nullptr ) {
                 ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
+                add_reshape_if_needed(init_val, var);
                 tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
                 is_stmt_created = true;
             }
@@ -635,10 +671,13 @@ public:
         Vec<ASR::expr_t*> init_exprs;
         init_exprs.reserve(al, x->getNumInits());
         clang::Expr** clang_inits = x->getInits();
+        ASR::expr_t* assignment_target_copy = assignment_target;
+        assignment_target = nullptr;
         for( size_t i = 0; i < x->getNumInits(); i++ ) {
             TraverseStmt(clang_inits[i]);
             init_exprs.push_back(al, ASRUtils::EXPR(tmp));
         }
+        assignment_target = assignment_target_copy;
         ASR::ttype_t* type = ASRUtils::expr_type(init_exprs[init_exprs.size() - 1]);
         Vec<ASR::dimension_t> dims; dims.reserve(al, 1);
         ASR::dimension_t dim; dim.loc = Lloc(x);

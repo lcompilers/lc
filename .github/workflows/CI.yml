@@ -52,6 +52,7 @@ jobs:
         shell: bash -l -e {0}
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
+            export CPATH=$CONDA_PREFIX/include:$CPATH
             lc --ast-dump tests/test.cpp
             lc --extra-arg=-Isrc/runtime/include examples/expr2.c --asr-dump
             ./run_tests.py
@@ -77,5 +78,6 @@ jobs:
         shell: bash -l -e {0}
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
+            export CPATH=$CONDA_PREFIX/include:$CPATH
             ./integration_tests/run_tests.py -b gcc llvm wasm c
             ./integration_tests/run_tests.py -b gcc llvm wasm c -f
