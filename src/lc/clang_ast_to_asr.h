@@ -55,13 +55,14 @@ public:
     std::vector<std::map<std::string, std::string>> scopes;
     std::string cxx_operator_name;
     ASR::expr_t* assignment_target;
+    Vec<ASR::expr_t*>* print_args;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
         Context(Context_), al{al_}, tu{tu_},
         tmp{nullptr}, current_body{nullptr},
         is_stmt_created{true}, cxx_operator_name{""},
-        assignment_target{nullptr} {}
+        assignment_target{nullptr}, print_args{nullptr} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -212,7 +213,8 @@ public:
         return array;
     }
 
-    ASR::ttype_t* ClangTypeToASRType(const clang::QualType& qual_type) {
+    ASR::ttype_t* ClangTypeToASRType(const clang::QualType& qual_type,
+        Vec<ASR::dimension_t>* xshape_result=nullptr) {
         const clang::SplitQualType& split_qual_type = qual_type.split();
         const clang::Type* clang_type = split_qual_type.asPair().first;
         const clang::Qualifiers qualifiers = split_qual_type.asPair().second;
@@ -266,7 +268,7 @@ public:
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Elaborated ) {
             const clang::ElaboratedType* elaborated_type = clang_type->getAs<clang::ElaboratedType>();
             clang::QualType desugared_type = elaborated_type->desugar();
-            type = ClangTypeToASRType(desugared_type);
+            type = ClangTypeToASRType(desugared_type, xshape_result);
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::TemplateSpecialization ) {
             const clang::TemplateSpecializationType* template_specialization = clang_type->getAs<clang::TemplateSpecializationType>();
             std::string template_name = template_specialization->getTemplateName().getAsTemplateDecl()->getNameAsString();
@@ -296,6 +298,41 @@ public:
                     empty_dims.p, empty_dims.size(),
                     ASR::array_physical_typeType::DescriptorArray));
                 type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, l, type));
+            } else if( template_name == "xtensor_fixed" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( template_arguments.size() != 2 ) {
+                    throw std::runtime_error("xtensor_fixed type must be initialised with element type and shape.");
+                }
+                const clang::QualType& qual_type = template_arguments.at(0).getAsType();
+                const clang::QualType& shape_type = template_arguments.at(1).getAsType();
+                Vec<ASR::dimension_t> xtensor_fixed_dims; xtensor_fixed_dims.reserve(al, 1);
+                ClangTypeToASRType(shape_type, &xtensor_fixed_dims);
+                type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
+                    ClangTypeToASRType(qual_type),
+                    xtensor_fixed_dims.p, xtensor_fixed_dims.size(),
+                    ASR::array_physical_typeType::FixedSizeArray));
+            } else if( template_name == "xshape" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( xshape_result == nullptr ) {
+                    throw std::runtime_error("Result Vec<ASR::dimention_t>* not provided.");
+                }
+
+                ASR::expr_t* zero = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
+                    ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+                for( int i = 0; i < template_arguments.size(); i++ ) {
+                    clang::Expr* clang_rank = template_arguments.at(i).getAsExpr();
+                    TraverseStmt(clang_rank);
+                    int rank = 0;
+                    if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp), rank) ) {
+                        throw std::runtime_error("Rank provided in the xshape must be a constant.");
+                    }
+                    ASR::dimension_t dim; dim.loc = l;
+                    dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, rank,
+                        ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+                    dim.m_start = zero;
+                    xshape_result->push_back(al, dim);
+                }
+                return nullptr;
             } else {
                 throw std::runtime_error(std::string("Unrecognized type ") + template_name);
             }
@@ -360,26 +397,37 @@ public:
 
     bool TraverseCXXOperatorCallExpr(clang::CXXOperatorCallExpr* x) {
         clang::Expr* callee = x->getCallee();
+        cxx_operator_name.clear();
         TraverseStmt(callee);
         if( cxx_operator_name == "operator<<" ) {
+            if( print_args == nullptr ) {
+                print_args = al.make_new<Vec<ASR::expr_t*>>();
+                print_args->reserve(al, 1);
+            }
             clang::Expr** args = x->getArgs();
-            TraverseStmt(args[0]);
-            if( cxx_operator_name != "cout" ) {
-                throw std::runtime_error("Only cout is supported in operator<<.");
-            }
-            size_t n_args = x->getNumArgs();
-            Vec<ASR::expr_t*> print_args;
-            print_args.reserve(al, n_args);
-            for( size_t i = 1; i < n_args; i++ ) {
-                TraverseStmt(args[i]);
+            cxx_operator_name.clear();
+            TraverseStmt(args[1]);
+            if( cxx_operator_name.size() == 0 && print_args != nullptr && tmp != nullptr ) {
                 ASR::expr_t* arg = ASRUtils::EXPR(tmp);
-                print_args.push_back(al, arg);
+                print_args->push_back(al, arg);
             }
-            tmp = ASR::make_Print_t(al, Lloc(x), print_args.p, print_args.size(), nullptr, nullptr);
-            is_stmt_created = true;
+            cxx_operator_name.clear();
+            TraverseStmt(args[0]);
+            if( cxx_operator_name == "cout" ) {
+                Vec<ASR::expr_t*> print_args_vec;
+                print_args_vec.reserve(al, print_args->size());
+                for( int i = print_args->size() - 1; i >= 0; i-- ) {
+                    print_args_vec.push_back(al, print_args->p[i]);
+                }
+                tmp = ASR::make_Print_t(al, Lloc(x), print_args_vec.p,
+                    print_args_vec.size(), nullptr, nullptr);
+                print_args = nullptr;
+                is_stmt_created = true;
+            }
         } else {
             throw std::runtime_error("Only std::ostream operator is supported.");
         }
+        cxx_operator_name.clear();
         return true;
     }
 
@@ -802,7 +850,7 @@ public:
 
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
-        if( name == "operator<<" || name == "cout" ) {
+        if( name == "operator<<" || name == "cout" || name == "endl" ) {
             cxx_operator_name = name;
             return true;
         }
