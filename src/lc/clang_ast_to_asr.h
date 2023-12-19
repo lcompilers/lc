@@ -33,12 +33,14 @@ namespace LCompilers {
 
 enum SpecialFunc {
     Printf,
-    Exit
+    Exit,
+    View
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
     {"printf", SpecialFunc::Printf},
-    {"exit", SpecialFunc::Exit}
+    {"exit", SpecialFunc::Exit},
+    {"view", SpecialFunc::View}
 };
 
 class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
@@ -455,6 +457,37 @@ public:
             } else {
                 throw std::runtime_error("Only indexing arrays is supported for now with operator().");
             }
+        } else if( cxx_operator_name == "operator=" ) {
+            if( x->getNumArgs() != 2 ) {
+                throw std::runtime_error("operator= accepts two arguments, found " + std::to_string(x->getNumArgs()));
+            }
+
+            clang::Expr** args = x->getArgs();
+            TraverseStmt(args[0]);
+            ASR::expr_t* obj = ASRUtils::EXPR(tmp);
+            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {
+                TraverseStmt(args[1]);
+                ASR::expr_t* value = ASRUtils::EXPR(tmp);
+                tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
+                is_stmt_created = true;
+            } else {
+                throw std::runtime_error("operator= is supported only for arrays.");
+            }
+        } else if( cxx_operator_name == "operator+" ) {
+            if( x->getNumArgs() != 2 ) {
+                throw std::runtime_error("operator+ accepts two arguments, found " + std::to_string(x->getNumArgs()));
+            }
+
+            clang::Expr** args = x->getArgs();
+            TraverseStmt(args[0]);
+            ASR::expr_t* obj = ASRUtils::EXPR(tmp);
+            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {
+                TraverseStmt(args[1]);
+                ASR::expr_t* value = ASRUtils::EXPR(tmp);
+                CreateBinOp(obj, value, ASR::binopType::Add, Lloc(x));
+            } else {
+                throw std::runtime_error("operator= is supported only for arrays.");
+            }
         } else {
             throw std::runtime_error("Only std::ostream and operator() are supported, found " + cxx_operator_name);
         }
@@ -464,8 +497,13 @@ public:
 
     bool check_and_handle_special_function(
         clang::CallExpr *x, ASR::expr_t* callee) {
-        ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
-        std::string func_name = std::string(ASRUtils::symbol_name(callee_Var->m_v));
+        std::string func_name;
+        if( cxx_operator_name.size() > 0 ) {
+            func_name = cxx_operator_name;
+        } else {
+            ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
+            func_name = std::string(ASRUtils::symbol_name(callee_Var->m_v));
+        }
         if (special_function_map.find(func_name) == special_function_map.end()) {
             return false;
         }
@@ -483,6 +521,43 @@ public:
         }
         if (sf == SpecialFunc::Printf) {
             tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
+        } else if (sf == SpecialFunc::View) {
+            ASR::expr_t* array = args.p[0];
+            size_t rank = ASRUtils::extract_n_dims_from_ttype(ASRUtils::expr_type(array));
+            Vec<ASR::array_index_t> array_section_indices;
+            array_section_indices.reserve(al, rank);
+            size_t i, j, result_dims = 0;
+            for( i = 0, j = 1; j < args.size(); j++, i++ ) {
+                ASR::array_index_t index;
+                index.loc = args.p[j]->base.loc;
+                index.m_left = nullptr;
+                index.m_right = args.p[j];
+                index.m_step = nullptr;
+                array_section_indices.push_back(al, index);
+            }
+            for( ; i < rank; i++ ) {
+                ASR::array_index_t index;
+                index.loc = callee->base.loc;
+                index.m_left = ASRUtils::get_bound<SemanticError>(array, i + 1, "lbound", al);
+                index.m_right = ASRUtils::get_bound<SemanticError>(array, i + 1, "ubound", al);
+                index.m_step = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, index.loc, 1,
+                    ASRUtils::TYPE(ASR::make_Integer_t(al, index.loc, 4))));
+                array_section_indices.push_back(al, index);
+                result_dims += 1;
+            }
+            ASR::ttype_t* element_type = ASRUtils::extract_type(ASRUtils::expr_type(array));
+            Vec<ASR::dimension_t> empty_dims; empty_dims.reserve(al, result_dims);
+            for( size_t i = 0; i < result_dims; i++ ) {
+                ASR::dimension_t dim;
+                dim.loc = Lloc(x);
+                dim.m_length = nullptr;
+                dim.m_start = nullptr;
+                empty_dims.push_back(al, dim);
+            }
+            ASR::ttype_t* array_section_type = ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x),
+                element_type, empty_dims.p, empty_dims.size(), ASR::array_physical_typeType::DescriptorArray));
+            tmp = ASR::make_ArraySection_t(al, Lloc(x), array, array_section_indices.p,
+                array_section_indices.size(), array_section_type, nullptr);
         } else if (sf == SpecialFunc::Exit) {
             LCOMPILERS_ASSERT(args.size() == 1);
             tmp = ASR::make_Stop_t(al, Lloc(x), args[0]);
@@ -882,7 +957,9 @@ public:
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
         if( name == "operator<<" || name == "cout" ||
-            name == "endl" || name == "operator()" ) {
+            name == "endl" || name == "operator()" ||
+            name == "operator+" || name == "operator=" ||
+            name == "view" ) {
             cxx_operator_name = name;
             return true;
         }
