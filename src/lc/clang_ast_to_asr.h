@@ -424,8 +424,39 @@ public:
                 print_args = nullptr;
                 is_stmt_created = true;
             }
+        } else if( cxx_operator_name == "operator()" ) {
+            clang::Expr** args = x->getArgs();
+            if( x->getNumArgs() == 0 ) {
+                throw std::runtime_error("operator() needs at least the callee to be present.");
+            }
+
+            TraverseStmt(args[0]);
+            ASR::expr_t* obj = ASRUtils::EXPR(tmp);
+            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {
+                Vec<ASR::array_index_t> array_indices;
+                array_indices.reserve(al, x->getNumArgs() - 1);
+                for( size_t i = 1; i < x->getNumArgs(); i++ ) {
+                    TraverseStmt(args[i]);
+                    ASR::expr_t* index = ASRUtils::EXPR(tmp);
+                    ASR::array_index_t array_index;
+                    array_index.loc = index->base.loc;
+                    array_index.m_left = nullptr;
+                    array_index.m_right = index;
+                    array_index.m_step = nullptr;
+                    array_indices.push_back(al, array_index);
+                }
+                tmp = ASR::make_ArrayItem_t(al, Lloc(x), obj,
+                    array_indices.p, array_indices.size(),
+                    ASRUtils::type_get_past_allocatable(
+                        ASRUtils::type_get_past_pointer(
+                            ASRUtils::type_get_past_array(
+                                ASRUtils::expr_type(obj)))),
+                    ASR::arraystorageType::RowMajor, nullptr);
+            } else {
+                throw std::runtime_error("Only indexing arrays is supported for now with operator().");
+            }
         } else {
-            throw std::runtime_error("Only std::ostream operator is supported.");
+            throw std::runtime_error("Only std::ostream and operator() are supported, found " + cxx_operator_name);
         }
         cxx_operator_name.clear();
         return true;
@@ -850,7 +881,8 @@ public:
 
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
-        if( name == "operator<<" || name == "cout" || name == "endl" ) {
+        if( name == "operator<<" || name == "cout" ||
+            name == "endl" || name == "operator()" ) {
             cxx_operator_name = name;
             return true;
         }
