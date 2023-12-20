@@ -1,8 +1,6 @@
 #ifndef CLANG_AST_TO_ASR_H
 #define CLANG_AST_TO_ASR_H
 
-#define WITH_LFORTRAN_ASSERT
-
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -36,6 +34,7 @@ enum SpecialFunc {
     Exit,
     View,
     Shape,
+    Empty,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -43,6 +42,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"exit", SpecialFunc::Exit},
     {"view", SpecialFunc::View},
     {"shape", SpecialFunc::Shape},
+    {"empty", SpecialFunc::Empty}
 };
 
 class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
@@ -124,7 +124,6 @@ public:
 
         std::string main_func = "main";
         ASR::symbol_t *main_sym = tu->m_symtab->resolve_symbol(main_func);
-        LCOMPILERS_ASSERT(main_sym);
         if (main_sym == nullptr) {
             return;
         }
@@ -494,11 +493,15 @@ public:
             clang::Expr** args = x->getArgs();
             TraverseStmt(args[0]);
             ASR::expr_t* obj = ASRUtils::EXPR(tmp);
+            assignment_target = obj;
             if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {
                 TraverseStmt(args[1]);
-                ASR::expr_t* value = ASRUtils::EXPR(tmp);
-                tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
-                is_stmt_created = true;
+                if( !is_stmt_created ) {
+                    ASR::expr_t* value = ASRUtils::EXPR(tmp);
+                    tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
+                    is_stmt_created = true;
+                }
+                assignment_target = nullptr;
             } else {
                 throw std::runtime_error("operator= is supported only for arrays.");
             }
@@ -543,6 +546,8 @@ public:
         Vec<ASR::expr_t*> args;
         args.reserve(al, 1);
         bool skip_format_str = true;
+        ASR::expr_t* assignment_target_copy = assignment_target;
+        assignment_target = nullptr;
         for (auto *p : x->arguments()) {
             TraverseStmt(p);
             if (sf == SpecialFunc::Printf && skip_format_str) {
@@ -551,6 +556,7 @@ public:
             }
             args.push_back(al, ASRUtils::EXPR(tmp));
         }
+        assignment_target = assignment_target_copy;
         if (sf == SpecialFunc::Printf) {
             tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
             is_stmt_created = true;
@@ -614,6 +620,46 @@ public:
             LCOMPILERS_ASSERT(args.size() == 1);
             tmp = ASR::make_Stop_t(al, Lloc(x), args[0]);
             is_stmt_created = true;
+        } else if (sf == SpecialFunc::Empty) {
+            if( args.size() != 1 ) {
+                throw std::runtime_error("xt::empty must be provided with shape.");
+            }
+            if( assignment_target == nullptr ) {
+                throw std::runtime_error("xt::empty should be used only in assignment statement.");
+            }
+            if( !ASRUtils::is_allocatable(assignment_target) ) {
+                throw std::runtime_error("Assignment target must be an alloctable");
+            }
+
+            if( ASR::is_a<ASR::ArrayConstant_t>(*args.p[0]) ) {
+                ASR::ArrayConstant_t* array_constant = ASR::down_cast<ASR::ArrayConstant_t>(args.p[0]);
+                size_t target_rank = ASRUtils::extract_n_dims_from_ttype(
+                    ASRUtils::expr_type(assignment_target));
+                if( array_constant->n_args != target_rank ) {
+                    throw std::runtime_error("Assignment target must be of same rank as the size of the shape array.");
+                }
+
+                Vec<ASR::alloc_arg_t> alloc_args; alloc_args.reserve(al, 1);
+                ASR::alloc_arg_t alloc_arg; alloc_arg.loc = Lloc(x);
+                alloc_arg.m_a = assignment_target;
+                alloc_arg.m_len_expr = nullptr; alloc_arg.m_type = nullptr;
+                Vec<ASR::dimension_t> alloc_dims; alloc_dims.reserve(al, target_rank);
+                for( size_t i = 0; i < target_rank; i++ ) {
+                    ASR::dimension_t alloc_dim;
+                    alloc_dim.loc = Lloc(x);
+                    alloc_dim.m_length = array_constant->m_args[i];
+                    alloc_dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(
+                        al, Lloc(x), 0, ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
+                    alloc_dims.push_back(al, alloc_dim);
+                }
+                alloc_arg.m_dims = alloc_dims.p; alloc_arg.n_dims = alloc_dims.size();
+                alloc_args.push_back(al, alloc_arg);
+                tmp = ASR::make_Allocate_t(al, Lloc(x), alloc_args.p, alloc_args.size(),
+                    nullptr, nullptr, nullptr);
+                is_stmt_created = true;
+            } else {
+                throw std::runtime_error("Only {...} is allowed for supplying shape to xt::empty.");
+            }
         } else {
             throw std::runtime_error("Only printf and exit special functions supported");
         }
@@ -648,12 +694,12 @@ public:
             tmp = ASRUtils::make_SubroutineCall_t_util(al, Lloc(x), callee_sym,
                 callee_sym, call_args.p, call_args.size(), nullptr,
                 nullptr, false);
+            is_stmt_created = true;
         } else {
             tmp = ASRUtils::make_FunctionCall_t_util(al, Lloc(x), callee_sym,
                 callee_sym, call_args.p, call_args.size(), return_type,
                 nullptr, nullptr);
         }
-        is_stmt_created = true;
         return true;
     }
 
@@ -733,9 +779,7 @@ public:
         ASR::dimension_t *expr_dims = nullptr, *target_expr_dims = nullptr;
         size_t expr_rank = ASRUtils::extract_dimensions_from_ttype(expr_type, expr_dims);
         size_t target_expr_rank = ASRUtils::extract_dimensions_from_ttype(target_expr_type, target_expr_dims);
-        if( expr_rank == target_expr_rank ||
-            ASRUtils::extract_physical_type(target_expr_type) ==
-                ASR::array_physical_typeType::FixedSizeArray ) {
+        if( expr_rank == target_expr_rank ) {
             return ;
         }
 
@@ -757,8 +801,17 @@ public:
             new_shape_dims.size(), ASR::array_physical_typeType::FixedSizeArray));
         ASR::expr_t* new_shape = ASRUtils::EXPR(ASR::make_ArrayConstant_t(al, loc,
             new_shape_.p, new_shape_.size(), new_shape_type, ASR::arraystorageType::RowMajor));
+        new_shape = ASRUtils::cast_to_descriptor(al, new_shape);
+
+        ASR::ttype_t* reshaped_expr_type = target_expr_type;
+        if( ASRUtils::is_fixed_size_array(expr_type) ) {
+            reshaped_expr_type = ASRUtils::duplicate_type_with_empty_dims(al,
+                ASRUtils::type_get_past_allocatable(
+                    ASRUtils::type_get_past_pointer(target_expr_type)),
+                ASR::array_physical_typeType::FixedSizeArray, true);
+        }
         ASR::expr_t* reshaped_expr = ASRUtils::EXPR(ASR::make_ArrayReshape_t(al, loc, expr,
-            new_shape, target_expr_type, nullptr));
+            new_shape, reshaped_expr_type, nullptr));
         expr = reshaped_expr;
     }
 
@@ -805,7 +858,7 @@ public:
             return ;
         }
 
-        LCOMPILERS_ASSERT(ASR::is_a<ASR::ArrayConstant_t>(array_constant));
+        LCOMPILERS_ASSERT(ASR::is_a<ASR::ArrayConstant_t>(*array_constant));
         ASR::ArrayConstant_t* array_constant_t = ASR::down_cast<ASR::ArrayConstant_t>(array_constant);
         Vec<ASR::expr_t*> new_elements; new_elements.reserve(al, array_constant_t->n_args);
         for( size_t i = 0; i < array_constant_t->n_args; i++ ) {
@@ -1011,7 +1064,7 @@ public:
         if( name == "operator<<" || name == "cout" ||
             name == "endl" || name == "operator()" ||
             name == "operator+" || name == "operator=" ||
-            name == "view" ) {
+            name == "view" || name == "empty" ) {
             cxx_operator_name = name;
             return true;
         }
