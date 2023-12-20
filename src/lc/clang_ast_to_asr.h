@@ -34,13 +34,15 @@ namespace LCompilers {
 enum SpecialFunc {
     Printf,
     Exit,
-    View
+    View,
+    Shape,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
     {"printf", SpecialFunc::Printf},
     {"exit", SpecialFunc::Exit},
-    {"view", SpecialFunc::View}
+    {"view", SpecialFunc::View},
+    {"shape", SpecialFunc::Shape},
 };
 
 class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
@@ -55,7 +57,7 @@ public:
     Vec<ASR::stmt_t*>* current_body;
     bool is_stmt_created;
     std::vector<std::map<std::string, std::string>> scopes;
-    std::string cxx_operator_name;
+    std::string cxx_operator_name, member_name;
     ASR::expr_t* assignment_target;
     Vec<ASR::expr_t*>* print_args;
 
@@ -64,7 +66,8 @@ public:
         Context(Context_), al{al_}, tu{tu_},
         tmp{nullptr}, current_body{nullptr},
         is_stmt_created{true}, cxx_operator_name{""},
-        assignment_target{nullptr}, print_args{nullptr} {}
+        member_name{""}, assignment_target{nullptr},
+        print_args{nullptr} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -267,6 +270,10 @@ public:
             vec.push_back(al, dim);
             type = ASRUtils::make_Array_t_util(al, l, type, vec.p, vec.size());
             type = flatten_Array(type);
+        } else if( clang_type->getTypeClass() == clang::Type::LValueReference ) {
+            const clang::LValueReferenceType* lvalue_reference_type = clang_type->getAs<clang::LValueReferenceType>();
+            clang::QualType pointee_type = lvalue_reference_type->getPointeeType();
+            type = ClangTypeToASRType(pointee_type, xshape_result);
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Elaborated ) {
             const clang::ElaboratedType* elaborated_type = clang_type->getAs<clang::ElaboratedType>();
             clang::QualType desugared_type = elaborated_type->desugar();
@@ -355,6 +362,10 @@ public:
             name = current_scope->get_unique_name("param");
         }
         ASR::ttype_t* type = ClangTypeToASRType(x->getType());
+        if( x->getType()->getTypeClass() != clang::Type::LValueReference &&
+            ASRUtils::is_array(type) ) {
+            throw std::runtime_error("Array objects should be passed by reference only.");
+        }
         clang::Expr *init = x->getDefaultArg();
         ASR::expr_t* asr_init = nullptr;
         if (init) {
@@ -394,6 +405,24 @@ public:
         tmp = ASR::make_Cast_t(al, Lloc(x), arg, asr_cast_kind,
                 ClangTypeToASRType(x->getType()), nullptr);
         is_stmt_created = false;
+        return true;
+    }
+
+    bool TraverseMemberExpr(clang::MemberExpr* x) {
+        member_name = x->getMemberDecl()->getNameAsString();
+        return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseMemberExpr(x);
+    }
+
+    bool TraverseCXXMemberCallExpr(clang::CXXMemberCallExpr* x) {
+        clang::Expr* callee = x->getCallee();
+        member_name.clear();
+        TraverseStmt(callee);
+        ASR::expr_t* asr_callee = ASRUtils::EXPR(tmp);
+        if( !check_and_handle_special_function(x, asr_callee) ) {
+             throw std::runtime_error("Only xt::xtensor::shape is supported.");
+        }
+
+        member_name.clear();
         return true;
     }
 
@@ -495,11 +524,14 @@ public:
         return true;
     }
 
+    template <typename CallExprType>
     bool check_and_handle_special_function(
-        clang::CallExpr *x, ASR::expr_t* callee) {
+        CallExprType *x, ASR::expr_t* callee) {
         std::string func_name;
         if( cxx_operator_name.size() > 0 ) {
             func_name = cxx_operator_name;
+        } else if( member_name.size() > 0 ) {
+            func_name = member_name;
         } else {
             ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
             func_name = std::string(ASRUtils::symbol_name(callee_Var->m_v));
@@ -521,6 +553,7 @@ public:
         }
         if (sf == SpecialFunc::Printf) {
             tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
+            is_stmt_created = true;
         } else if (sf == SpecialFunc::View) {
             ASR::expr_t* array = args.p[0];
             size_t rank = ASRUtils::extract_n_dims_from_ttype(ASRUtils::expr_type(array));
@@ -558,13 +591,32 @@ public:
                 element_type, empty_dims.p, empty_dims.size(), ASR::array_physical_typeType::DescriptorArray));
             tmp = ASR::make_ArraySection_t(al, Lloc(x), array, array_section_indices.p,
                 array_section_indices.size(), array_section_type, nullptr);
+        } else if (sf == SpecialFunc::Shape) {
+            if( args.size() == 0 ) {
+                throw std::runtime_error("Calling xt::xtensor::shape without dimension is not supported yet.");
+            }
+
+            ASR::expr_t* dim = args.p[0];
+            int dim_value = -1;
+            if( ASRUtils::extract_value(dim, dim_value) ) {
+                dim = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, dim->base.loc,
+                    dim_value + 1, ASRUtils::expr_type(dim)));
+            } else {
+                dim = ASRUtils::EXPR(ASR::make_IntegerBinOp_t(al, dim->base.loc,
+                    dim, ASR::binopType::Add, ASRUtils::get_constant_one_with_given_type(
+                        al, ASRUtils::expr_type(dim)), ASRUtils::expr_type(dim), nullptr));
+            }
+
+            tmp = ASR::make_ArraySize_t(al, Lloc(x), callee, dim,
+                ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)),
+                nullptr);
         } else if (sf == SpecialFunc::Exit) {
             LCOMPILERS_ASSERT(args.size() == 1);
             tmp = ASR::make_Stop_t(al, Lloc(x), args[0]);
+            is_stmt_created = true;
         } else {
             throw std::runtime_error("Only printf and exit special functions supported");
         }
-        is_stmt_created = true;
         return true;
     }
 
