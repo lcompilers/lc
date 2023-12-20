@@ -191,6 +191,7 @@ namespace LCompilers {
     } \
     compiler_options.po.always_run = true; \
     compiler_options.po.run_fun = "f"; \
+    compiler_options.po.realloc_lhs = true; \
     diagnostics.diagnostics.clear(); \
 
 int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t *asr) {
