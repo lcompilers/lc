@@ -613,6 +613,7 @@ public:
         } else if (sf == SpecialFunc::Exit) {
             LCOMPILERS_ASSERT(args.size() == 1);
             tmp = ASR::make_Stop_t(al, Lloc(x), args[0]);
+            is_stmt_created = true;
         } else {
             throw std::runtime_error("Only printf and exit special functions supported");
         }
