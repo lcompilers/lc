@@ -268,19 +268,22 @@ namespace LCompilers {
             builder->CreateStore(llvm::ConstantInt::get(context, llvm::APInt(32, n_dims)), get_rank(arr, true));
             builder->CreateStore(dim_des_first, dim_des_val);
             dim_des_val = LLVM::CreateLoad(*builder, dim_des_val);
-            llvm::Value* prod = llvm::ConstantInt::get(context, llvm::APInt(32, 1));
             for( int r = 0; r < n_dims; r++ ) {
                 llvm::Value* dim_val = llvm_utils->create_ptr_gep(dim_des_val, r);
-                llvm::Value* s_val = llvm_utils->create_gep(dim_val, 0);
                 llvm::Value* l_val = llvm_utils->create_gep(dim_val, 1);
                 llvm::Value* dim_size_ptr = llvm_utils->create_gep(dim_val, 2);
-                builder->CreateStore(prod, s_val);
                 builder->CreateStore(llvm_dims[r].first, l_val);
                 llvm::Value* dim_size = llvm_dims[r].second;
-                prod = builder->CreateMul(prod, dim_size);
                 builder->CreateStore(dim_size, dim_size_ptr);
             }
-
+            llvm::Value* prod = llvm::ConstantInt::get(context, llvm::APInt(32, 1));
+            for( int r = n_dims - 1; r >= 0; r-- ) {
+                llvm::Value* dim_val = llvm_utils->create_ptr_gep(dim_des_val, r);
+                llvm::Value* s_val = llvm_utils->create_gep(dim_val, 0);
+                builder->CreateStore(prod, s_val);
+                llvm::Value* dim_size = llvm_dims[r].second;
+                prod = builder->CreateMul(prod, dim_size);
+            }
             if( !reserve_data_memory ) {
                 return ;
             }
@@ -340,16 +343,20 @@ namespace LCompilers {
             builder->CreateStore(llvm::ConstantInt::get(context, llvm::APInt(32, 0)),
                                     offset_val);
             llvm::Value* dim_des_val = LLVM::CreateLoad(*builder, llvm_utils->create_gep(arr, 2));
-            llvm::Value* prod = llvm::ConstantInt::get(context, llvm::APInt(32, 1));
             for( int r = 0; r < n_dims; r++ ) {
                 llvm::Value* dim_val = llvm_utils->create_ptr_gep(dim_des_val, r);
-                llvm::Value* s_val = llvm_utils->create_gep(dim_val, 0);
                 llvm::Value* l_val = llvm_utils->create_gep(dim_val, 1);
                 llvm::Value* dim_size_ptr = llvm_utils->create_gep(dim_val, 2);
-                builder->CreateStore(prod, s_val);
                 builder->CreateStore(llvm_dims[r].first, l_val);
                 llvm::Value* dim_size = llvm_dims[r].second;
                 builder->CreateStore(dim_size, dim_size_ptr);
+            }
+            llvm::Value* prod = llvm::ConstantInt::get(context, llvm::APInt(32, 1));
+            for( int r = n_dims - 1; r >= 0; r-- ) {
+                llvm::Value* dim_val = llvm_utils->create_ptr_gep(dim_des_val, r);
+                llvm::Value* s_val = llvm_utils->create_gep(dim_val, 0);
+                builder->CreateStore(prod, s_val);
+                llvm::Value* dim_size = llvm_dims[r].second;
                 prod = builder->CreateMul(prod, dim_size);
             }
             llvm::Value* ptr2firstptr = get_pointer_to_data(arr);
