@@ -14,6 +14,17 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Debug" OR
     message(FATAL_ERROR "CMAKE_BUILD_TYPE must be one of: Debug, Release (current value: '${CMAKE_BUILD_TYPE}')")
 endif ()
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # In Debug mode we enable assertions
+    set(WITH_LFORTRAN_ASSERT_DEFAULT yes)
+else()
+    set(WITH_LFORTRAN_ASSERT_DEFAULT no)
+endif()
+
+# LFORTRAN_ASSERT
+set(WITH_LFORTRAN_ASSERT ${WITH_LFORTRAN_ASSERT_DEFAULT}
+    CACHE BOOL "Enable LFORTRAN_ASSERT macro")
+
 if (NOT CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD 17
         CACHE STRING "C++ standard" FORCE)
