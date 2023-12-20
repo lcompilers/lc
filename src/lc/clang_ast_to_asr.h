@@ -362,6 +362,10 @@ public:
             name = current_scope->get_unique_name("param");
         }
         ASR::ttype_t* type = ClangTypeToASRType(x->getType());
+        if( x->getType()->getTypeClass() != clang::Type::LValueReference &&
+            ASRUtils::is_array(type) ) {
+            throw std::runtime_error("Array objects should be passed by reference only.");
+        }
         clang::Expr *init = x->getDefaultArg();
         ASR::expr_t* asr_init = nullptr;
         if (init) {
