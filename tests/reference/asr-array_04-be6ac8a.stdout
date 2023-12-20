@@ -70,6 +70,29 @@
                                     Public
                                     Required
                                     .false.
+                                ),
+                            res:
+                                (Variable
+                                    2
+                                    res
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Allocatable
+                                        (Array
+                                            (Real 8)
+                                            [(()
+                                            ())]
+                                            DescriptorArray
+                                        )
+                                    )
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
                                 )
                         })
                     main
@@ -149,36 +172,45 @@
                                 )
                                 RowMajor
                             )
-                            (ArrayConstant
-                                [(ArraySize
-                                    (Var 2 arr1)
-                                    (IntegerConstant 1 (Integer 4))
-                                    (Integer 4)
-                                    ()
+                            (ArrayPhysicalCast
+                                (ArrayConstant
+                                    [(ArraySize
+                                        (Var 2 arr1)
+                                        (IntegerConstant 1 (Integer 4))
+                                        (Integer 4)
+                                        ()
+                                    )
+                                    (ArraySize
+                                        (Var 2 arr1)
+                                        (IntegerConstant 2 (Integer 4))
+                                        (Integer 4)
+                                        ()
+                                    )]
+                                    (Array
+                                        (Integer 4)
+                                        [((IntegerConstant 0 (Integer 4))
+                                        (IntegerConstant 2 (Integer 4)))]
+                                        FixedSizeArray
+                                    )
+                                    RowMajor
                                 )
-                                (ArraySize
-                                    (Var 2 arr1)
-                                    (IntegerConstant 2 (Integer 4))
-                                    (Integer 4)
-                                    ()
-                                )]
+                                FixedSizeArray
+                                DescriptorArray
                                 (Array
                                     (Integer 4)
                                     [((IntegerConstant 0 (Integer 4))
                                     (IntegerConstant 2 (Integer 4)))]
-                                    FixedSizeArray
-                                )
-                                RowMajor
-                            )
-                            (Allocatable
-                                (Array
-                                    (Real 8)
-                                    [(()
-                                    ())
-                                    (()
-                                    ())]
                                     DescriptorArray
                                 )
+                                ()
+                            )
+                            (Array
+                                (Real 8)
+                                [(()
+                                ())
+                                (()
+                                ())]
+                                FixedSizeArray
                             )
                             ()
                         )
@@ -219,8 +251,67 @@
                         )
                         ()
                     )
+                    (Allocate
+                        [((Var 2 res)
+                        [((IntegerConstant 0 (Integer 4))
+                        (IntegerConstant 3 (Integer 4)))]
+                        ()
+                        ())]
+                        ()
+                        ()
+                        ()
+                    )
+                    (=
+                        (Var 2 res)
+                        (RealBinOp
+                            (ArraySection
+                                (Var 2 arr1)
+                                [(()
+                                (IntegerConstant 1 (Integer 4))
+                                ())
+                                ((ArrayBound
+                                    (Var 2 arr1)
+                                    (IntegerConstant 2 (Integer 4))
+                                    (Integer 4)
+                                    LBound
+                                    ()
+                                )
+                                (ArrayBound
+                                    (Var 2 arr1)
+                                    (IntegerConstant 2 (Integer 4))
+                                    (Integer 4)
+                                    UBound
+                                    ()
+                                )
+                                (IntegerConstant 1 (Integer 4)))]
+                                (Array
+                                    (Real 8)
+                                    [(()
+                                    ())]
+                                    DescriptorArray
+                                )
+                                ()
+                            )
+                            Add
+                            (Var 2 arr2)
+                            (Array
+                                (Real 8)
+                                [(()
+                                ())]
+                                DescriptorArray
+                            )
+                            ()
+                        )
+                        ()
+                    )
                     (Print
-                        [(Var 2 arr2)]
+                        [(Var 2 arr1)
+                        (Var 2 arr2)]
+                        ()
+                        ()
+                    )
+                    (Print
+                        [(Var 2 res)]
                         ()
                         ()
                     )

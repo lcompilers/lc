@@ -2,11 +2,11 @@
     "basename": "asr-array_04-be6ac8a",
     "cmd": "lc --asr-dump --no-color {infile} -o {outfile} -extra-arg=\"\"",
     "infile": "tests/../integration_tests/array_04.cpp",
-    "infile_hash": "a3e79a9500684211e6e080dc262e6f1e5005e257df6d05381f9dc9c6",
+    "infile_hash": "dd38786061d4a19743e4c32c2a3ecb08193777f81a2a0d3e87af0f0a",
     "outfile": null,
     "outfile_hash": null,
     "stdout": "asr-array_04-be6ac8a.stdout",
-    "stdout_hash": "8ccda65df8bedf43f3a0c20870b16ce84c05bc2dad0df3e41ddd122e",
+    "stdout_hash": "527842cbdfdfac8d3cf494d61c760428aa51ec431fcf2b3e5d2827cd",
     "stderr": null,
     "stderr_hash": null,
     "returncode": 0
