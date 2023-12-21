@@ -96,8 +96,7 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
             add_test(${name} ${CURRENT_BINARY_DIR}/${name})
         elseif (LC_BACKEND STREQUAL "wasm")
             # wasm test
-            execute_process(COMMAND ${LC} ${extra_args} --backend=wasm ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}
-                --extra-arg -I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include --)
+            execute_process(COMMAND ${LC} ${extra_args} --backend=wasm ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name} --)
             find_program(WASM_EXEC_RUNTIME node)
             execute_process(COMMAND "${WASM_EXEC_RUNTIME}" --version
                             OUTPUT_VARIABLE WASM_EXEC_VERSION
