@@ -477,10 +477,7 @@ public:
                 }
                 tmp = ASR::make_ArrayItem_t(al, Lloc(x), obj,
                     array_indices.p, array_indices.size(),
-                    ASRUtils::type_get_past_allocatable(
-                        ASRUtils::type_get_past_pointer(
-                            ASRUtils::type_get_past_array(
-                                ASRUtils::expr_type(obj)))),
+                    ASRUtils::extract_type(ASRUtils::expr_type(obj)),
                     ASR::arraystorageType::RowMajor, nullptr);
             } else {
                 throw std::runtime_error("Only indexing arrays is supported for now with operator().");
@@ -534,6 +531,9 @@ public:
         if( cxx_operator_name.size() > 0 ) {
             func_name = cxx_operator_name;
         } else if( member_name.size() > 0 ) {
+            if( callee == nullptr ) {
+                throw std::runtime_error("Callee object not available.");
+            }
             func_name = member_name;
         } else {
             ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
@@ -667,8 +667,12 @@ public:
     }
 
     bool TraverseCallExpr(clang::CallExpr *x) {
+        cxx_operator_name.clear();
         TraverseStmt(x->getCallee());
-        ASR::expr_t* callee = ASRUtils::EXPR(tmp);
+        ASR::expr_t* callee = nullptr;
+        if( tmp != nullptr ) {
+            callee = ASRUtils::EXPR(tmp);
+        }
         if( check_and_handle_special_function(x, callee) ) {
             return true;
         }
@@ -843,7 +847,7 @@ public:
             assignment_target = var;
             TraverseStmt(x->getInit());
             assignment_target = nullptr;
-            if( tmp != nullptr ) {
+            if( tmp != nullptr && !is_stmt_created ) {
                 ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
                 add_reshape_if_needed(init_val, var);
                 tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
@@ -1060,16 +1064,17 @@ public:
     }
 
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
+        cxx_operator_name.clear();
         std::string name = x->getNameInfo().getAsString();
-        if( name == "operator<<" || name == "cout" ||
+        ASR::symbol_t* sym = resolve_symbol(name);
+        if( sym == nullptr &&
+            (name == "operator<<" || name == "cout" ||
             name == "endl" || name == "operator()" ||
             name == "operator+" || name == "operator=" ||
-            name == "view" || name == "empty" ) {
+            name == "view" || name == "empty" || name == "printf") ) {
             cxx_operator_name = name;
             return true;
         }
-        ASR::symbol_t* sym = resolve_symbol(name);
-        LCOMPILERS_ASSERT(sym != nullptr);
         tmp = ASR::make_Var_t(al, Lloc(x), sym);
         is_stmt_created = false;
         return true;
