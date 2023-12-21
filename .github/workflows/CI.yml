@@ -54,7 +54,7 @@ jobs:
         run: |
             export CPATH=$CONDA_PREFIX/include:$CPATH
             lc --ast-dump tests/test.cpp
-            lc --extra-arg=-Isrc/runtime/include examples/expr2.c --asr-dump
+            lc examples/expr2.c --asr-dump
             ./run_tests.py
 
       - name: Test2 (Linux / macOS)
@@ -64,8 +64,8 @@ jobs:
             which clang
 
             # Test generating object files
-            lc examples/expr2.c --backend c --extra-arg="-Isrc/runtime/include" -o c_o -c --
-            lc examples/expr2.c --backend llvm --extra-arg="-Isrc/runtime/include" -o llvm_o -c --
+            lc examples/expr2.c --backend c -o c_o -c --
+            lc examples/expr2.c --backend llvm -o llvm_o -c --
             ls -1
 
       - name: Test3 (Linux / macOS)

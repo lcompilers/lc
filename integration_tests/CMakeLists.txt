@@ -96,8 +96,7 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
             add_test(${name} ${CURRENT_BINARY_DIR}/${name})
         elseif (LC_BACKEND STREQUAL "wasm")
             # wasm test
-            execute_process(COMMAND ${LC} ${extra_args} --backend=wasm ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}
-                --extra-arg -I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include --)
+            execute_process(COMMAND ${LC} ${extra_args} --backend=wasm ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name} --)
             find_program(WASM_EXEC_RUNTIME node)
             execute_process(COMMAND "${WASM_EXEC_RUNTIME}" --version
                             OUTPUT_VARIABLE WASM_EXEC_VERSION
@@ -176,18 +175,13 @@ endmacro(RUN)
 # x86           --- compile to x86 binary directly
 # wasm          --- compile to WASM binary directly
 
-RUN(NAME expr1.c LABELS gcc c wasm llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include)
-RUN(NAME expr2.c LABELS gcc c wasm llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include)
-RUN(NAME expr3.c FAIL LABELS gcc c wasm llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include)
+RUN(NAME expr1.c LABELS gcc c wasm llvm NOFAST)
+RUN(NAME expr2.c LABELS gcc c wasm llvm NOFAST)
+RUN(NAME expr3.c FAIL LABELS gcc c wasm llvm NOFAST)
 
 # arrays
-RUN(NAME array_01.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include)
-RUN(NAME array_02.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CMAKE_CURRENT_SOURCE_DIR}/../src/runtime/include)
+RUN(NAME array_01.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_02.cpp LABELS gcc llvm NOFAST)
 RUN(NAME array_03.cpp LABELS gcc llvm NOFAST
     EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
 RUN(NAME array_04.cpp LABELS gcc llvm NOFAST
@@ -199,4 +193,6 @@ RUN(NAME array_06.cpp LABELS gcc llvm NOFAST
 RUN(NAME array_07.cpp LABELS gcc llvm NOFAST
     EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
 RUN(NAME array_08.cpp LABELS gcc llvm NOFAST
+    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
+RUN(NAME array_09.cpp LABELS gcc llvm NOFAST
     EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)

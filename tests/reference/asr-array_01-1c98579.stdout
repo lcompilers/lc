@@ -5,11 +5,11 @@
             main:
                 (Function
                     (SymbolTable
-                        3
+                        2
                         {
                             __return_var:
                                 (Variable
-                                    3
+                                    2
                                     __return_var
                                     []
                                     ReturnVar
@@ -25,7 +25,7 @@
                                 ),
                             arr1d:
                                 (Variable
-                                    3
+                                    2
                                     arr1d
                                     []
                                     Local
@@ -46,7 +46,7 @@
                                 ),
                             arr2d:
                                 (Variable
-                                    3
+                                    2
                                     arr2d
                                     []
                                     Local
@@ -71,7 +71,7 @@
                                 ),
                             i:
                                 (Variable
-                                    3
+                                    2
                                     i
                                     []
                                     Local
@@ -87,7 +87,7 @@
                                 ),
                             j:
                                 (Variable
-                                    3
+                                    2
                                     j
                                     []
                                     Local
@@ -103,7 +103,7 @@
                                 ),
                             k:
                                 (Variable
-                                    3
+                                    2
                                     k
                                     []
                                     Local
@@ -119,7 +119,7 @@
                                 ),
                             l:
                                 (Variable
-                                    3
+                                    2
                                     l
                                     []
                                     Local
@@ -135,7 +135,7 @@
                                 ),
                             sum1d:
                                 (Variable
-                                    3
+                                    2
                                     sum1d
                                     []
                                     Local
@@ -151,7 +151,7 @@
                                 ),
                             sum2d:
                                 (Variable
-                                    3
+                                    2
                                     sum2d
                                     []
                                     Local
@@ -184,7 +184,7 @@
                     []
                     []
                     [(=
-                        (Var 3 arr1d)
+                        (Var 2 arr1d)
                         (ArrayConstant
                             [(IntegerConstant 1 (Integer 4))
                             (IntegerConstant 2 (Integer 4))
@@ -202,7 +202,7 @@
                         ()
                     )
                     (=
-                        (Var 3 arr2d)
+                        (Var 2 arr2d)
                         (ArrayReshape
                             (ArrayConstant
                                 [(IntegerConstant 1 (Integer 4))
@@ -275,38 +275,38 @@
                         ()
                     )
                     (=
-                        (Var 3 sum1d)
+                        (Var 2 sum1d)
                         (IntegerConstant 0 (Integer 4))
                         ()
                     )
                     (=
-                        (Var 3 sum2d)
+                        (Var 2 sum2d)
                         (IntegerConstant 0 (Integer 4))
                         ()
                     )
                     (=
-                        (Var 3 i)
+                        (Var 2 i)
                         (IntegerConstant 0 (Integer 4))
                         ()
                     )
                     (WhileLoop
                         ()
                         (IntegerCompare
-                            (Var 3 i)
+                            (Var 2 i)
                             Lt
                             (IntegerConstant 5 (Integer 4))
                             (Integer 4)
                             ()
                         )
                         [(=
-                            (Var 3 sum1d)
+                            (Var 2 sum1d)
                             (IntegerBinOp
-                                (Var 3 sum1d)
+                                (Var 2 sum1d)
                                 Add
                                 (ArrayItem
-                                    (Var 3 arr1d)
+                                    (Var 2 arr1d)
                                     [(()
-                                    (Var 3 i)
+                                    (Var 2 i)
                                     ())]
                                     (Integer 4)
                                     RowMajor
@@ -318,9 +318,9 @@
                             ()
                         )
                         (=
-                            (Var 3 i)
+                            (Var 2 i)
                             (IntegerBinOp
-                                (Var 3 i)
+                                (Var 2 i)
                                 Add
                                 (IntegerConstant 1 (Integer 4))
                                 (Integer 4)
@@ -330,62 +330,62 @@
                         )]
                     )
                     (=
-                        (Var 3 j)
+                        (Var 2 j)
                         (IntegerConstant 0 (Integer 4))
                         ()
                     )
                     (WhileLoop
                         ()
                         (IntegerCompare
-                            (Var 3 j)
+                            (Var 2 j)
                             Lt
                             (IntegerConstant 4 (Integer 4))
                             (Integer 4)
                             ()
                         )
                         [(=
-                            (Var 3 k)
+                            (Var 2 k)
                             (IntegerConstant 0 (Integer 4))
                             ()
                         )
                         (WhileLoop
                             ()
                             (IntegerCompare
-                                (Var 3 k)
+                                (Var 2 k)
                                 Lt
                                 (IntegerConstant 3 (Integer 4))
                                 (Integer 4)
                                 ()
                             )
                             [(=
-                                (Var 3 l)
+                                (Var 2 l)
                                 (IntegerConstant 0 (Integer 4))
                                 ()
                             )
                             (WhileLoop
                                 ()
                                 (IntegerCompare
-                                    (Var 3 l)
+                                    (Var 2 l)
                                     Lt
                                     (IntegerConstant 2 (Integer 4))
                                     (Integer 4)
                                     ()
                                 )
                                 [(=
-                                    (Var 3 sum2d)
+                                    (Var 2 sum2d)
                                     (IntegerBinOp
-                                        (Var 3 sum2d)
+                                        (Var 2 sum2d)
                                         Add
                                         (ArrayItem
-                                            (Var 3 arr2d)
+                                            (Var 2 arr2d)
                                             [(()
-                                            (Var 3 j)
+                                            (Var 2 j)
                                             ())
                                             (()
-                                            (Var 3 k)
+                                            (Var 2 k)
                                             ())
                                             (()
-                                            (Var 3 l)
+                                            (Var 2 l)
                                             ())]
                                             (Integer 4)
                                             RowMajor
@@ -397,9 +397,9 @@
                                     ()
                                 )
                                 (=
-                                    (Var 3 l)
+                                    (Var 2 l)
                                     (IntegerBinOp
-                                        (Var 3 l)
+                                        (Var 2 l)
                                         Add
                                         (IntegerConstant 1 (Integer 4))
                                         (Integer 4)
@@ -409,9 +409,9 @@
                                 )]
                             )
                             (=
-                                (Var 3 k)
+                                (Var 2 k)
                                 (IntegerBinOp
-                                    (Var 3 k)
+                                    (Var 2 k)
                                     Add
                                     (IntegerConstant 1 (Integer 4))
                                     (Integer 4)
@@ -421,9 +421,9 @@
                             )]
                         )
                         (=
-                            (Var 3 j)
+                            (Var 2 j)
                             (IntegerBinOp
-                                (Var 3 j)
+                                (Var 2 j)
                                 Add
                                 (IntegerConstant 1 (Integer 4))
                                 (Integer 4)
@@ -433,18 +433,18 @@
                         )]
                     )
                     (Print
-                        [(Var 3 sum1d)
-                        (Var 3 sum2d)]
+                        [(Var 2 sum1d)
+                        (Var 2 sum2d)]
                         ()
                         ()
                     )
                     (=
-                        (Var 3 __return_var)
+                        (Var 2 __return_var)
                         (IntegerConstant 0 (Integer 4))
                         ()
                     )
                     (Return)]
-                    (Var 3 __return_var)
+                    (Var 2 __return_var)
                     Public
                     .false.
                     .false.
@@ -453,11 +453,11 @@
             main_program:
                 (Program
                     (SymbolTable
-                        4
+                        3
                         {
                             exit_code:
                                 (Variable
-                                    4
+                                    3
                                     exit_code
                                     []
                                     Local
@@ -475,7 +475,7 @@
                     main_program
                     [main]
                     [(=
-                        (Var 4 exit_code)
+                        (Var 3 exit_code)
                         (FunctionCall
                             1 main
                             1 main
