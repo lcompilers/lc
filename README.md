@@ -1,8 +1,8 @@
-# lc
+# LC
 
-LC is the C frontend to LCompilers.
+LC is the C and C++ frontend to LCompilers.
 
-# Build
+# Build and Run
 
     mamba env create -f environment_unix.yml
     conda activate lc
