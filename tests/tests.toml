@@ -15,7 +15,6 @@ fortran = true
 
 [[test]]
 filename = "expr2.c"
-extra_arg = "-Isrc/runtime/include"
 asr = true
 wat = true
 c = true
@@ -25,12 +24,10 @@ fortran = true
 
 [[test]]
 filename = "../integration_tests/array_01.cpp"
-extra_arg = "-Isrc/runtime/include"
 asr = true
 
 [[test]]
 filename = "../integration_tests/array_02.cpp"
-extra_arg = "-Isrc/runtime/include"
 asr = true
 
 [[test]]
