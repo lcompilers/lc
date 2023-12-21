@@ -23,6 +23,10 @@ int main() {
     xt::xtensor<double, 2> a = xt::empty<double>({3, 2});
     xt::xtensor<double, 2> b = xt::empty<double>({2, 3});
     xt::xtensor<double, 2> c = xt::empty<double>({3, 3});
+    xt::xtensor<double, 2> ce = {
+        {0.0, 0.0, 0.0},
+        {0.0, 6.0, 12.0},
+        {0.0, 12.0, 24.0}};
 
     for( int i = 0; i < a.shape(0); i++ ) {
         for( int j = 0; j < a.shape(1); j++ ) {
@@ -39,6 +43,13 @@ int main() {
     std::cout << a << b << std::endl;
     c = matmul(a, b);
     std::cout << c << std::endl;
+    for( int i = 0; i < c.shape(0); i++ ) {
+        for( int j = 0; j < c.shape(1); j++ ) {
+            if( c(i, j) != ce(i, j) ) {
+                exit(2);
+            }
+        }
+    }
 
     return 0;
 }
