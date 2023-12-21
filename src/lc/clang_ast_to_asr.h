@@ -75,6 +75,37 @@ class OneTimeUseString {
         }
 };
 
+template <typename T>
+class OneTimeUseASRNode {
+
+    private:
+
+        T* node;
+
+    public:
+
+        OneTimeUseASRNode(): node{nullptr} {}
+
+        T* get() {
+            T* node_ = node;
+            node = nullptr;
+            return node_;
+        }
+
+        void operator=(T* other) {
+            node = other;
+        }
+
+        bool operator!=(T* other) {
+            return node != other;
+        }
+
+        bool operator==(T* other) {
+            return node == other;
+        }
+
+};
+
 class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
 
 public:
@@ -83,7 +114,7 @@ public:
     SymbolTable *current_scope=nullptr;
     Allocator& al;
     ASR::asr_t*& tu;
-    ASR::asr_t* tmp;
+    OneTimeUseASRNode<ASR::asr_t> tmp;
     Vec<ASR::stmt_t*>* current_body;
     bool is_stmt_created;
     std::vector<std::map<std::string, std::string>> scopes;
@@ -95,9 +126,9 @@ public:
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
         Context(Context_), al{al_}, tu{tu_},
-        tmp{nullptr}, current_body{nullptr},
-        is_stmt_created{true}, assignment_target{nullptr},
-        print_args{nullptr}, is_all_called{false} {}
+        current_body{nullptr}, is_stmt_created{true},
+        assignment_target{nullptr}, print_args{nullptr},
+        is_all_called{false} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -293,7 +324,7 @@ public:
             TraverseStmt(expr);
             Vec<ASR::dimension_t> vec; vec.reserve(al, 1);
             ASR::dimension_t dim;
-            dim.loc = l; dim.m_length = ASRUtils::EXPR(tmp);
+            dim.loc = l; dim.m_length = ASRUtils::EXPR(tmp.get());
             dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
                 ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
             vec.push_back(al, dim);
@@ -319,7 +350,7 @@ public:
                 clang::Expr* clang_rank = template_arguments.at(1).getAsExpr();
                 TraverseStmt(clang_rank);
                 int rank = 0;
-                if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp), rank) ) {
+                if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp.get()), rank) ) {
                     throw std::runtime_error("Rank provided in the xtensor initialisation must be a constant.");
                 }
                 tmp = nullptr;
@@ -361,7 +392,7 @@ public:
                     clang::Expr* clang_rank = template_arguments.at(i).getAsExpr();
                     TraverseStmt(clang_rank);
                     int rank = 0;
-                    if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp), rank) ) {
+                    if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp.get()), rank) ) {
                         throw std::runtime_error("Rank provided in the xshape must be a constant.");
                     }
                     ASR::dimension_t dim; dim.loc = l;
@@ -399,14 +430,16 @@ public:
         ASR::expr_t* asr_init = nullptr;
         if (init) {
             TraverseStmt(init);
-            asr_init = ASRUtils::EXPR(tmp);
+            asr_init = ASRUtils::EXPR(tmp.get());
         }
 
         tmp = ASR::make_Variable_t(al, Lloc(x), current_scope, s2c(al, name),
             nullptr, 0, ASR::intentType::InOut, asr_init, nullptr,
             ASR::storage_typeType::Default, type, nullptr, ASR::abiType::Source,
             ASR::accessType::Public, ASR::presenceType::Required, false);
-        current_scope->add_symbol(name, ASR::down_cast<ASR::symbol_t>(tmp));
+        ASR::symbol_t* tmp_sym = ASR::down_cast<ASR::symbol_t>(tmp.get());
+        current_scope->add_symbol(name, tmp_sym);
+        tmp = ASR::make_Var_t(al, Lloc(x), tmp_sym);
         is_stmt_created = false;
         return true;
     }
@@ -430,7 +463,7 @@ public:
         }
         clang::Expr* sub_expr = x->getSubExpr();
         TraverseStmt(sub_expr);
-        ASR::expr_t* arg = ASRUtils::EXPR(tmp);
+        ASR::expr_t* arg = ASRUtils::EXPR(tmp.get());
         tmp = ASR::make_Cast_t(al, Lloc(x), arg, asr_cast_kind,
                 ClangTypeToASRType(x->getType()), nullptr);
         is_stmt_created = false;
@@ -445,7 +478,7 @@ public:
     bool TraverseCXXMemberCallExpr(clang::CXXMemberCallExpr* x) {
         clang::Expr* callee = x->getCallee();
         TraverseStmt(callee);
-        ASR::expr_t* asr_callee = ASRUtils::EXPR(tmp);
+        ASR::expr_t* asr_callee = ASRUtils::EXPR(tmp.get());
         if( !check_and_handle_special_function(x, asr_callee) ) {
              throw std::runtime_error("Only xt::xtensor::shape, xt::xtensor::fill is supported.");
         }
@@ -459,10 +492,10 @@ public:
             }    \
             clang::Expr** args = x->getArgs();    \
             TraverseStmt(args[0]);    \
-            ASR::expr_t* obj = ASRUtils::EXPR(tmp);    \
+            ASR::expr_t* obj = ASRUtils::EXPR(tmp.get());    \
             if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {    \
                 TraverseStmt(args[1]);    \
-                ASR::expr_t* value = ASRUtils::EXPR(tmp);    \
+                ASR::expr_t* value = ASRUtils::EXPR(tmp.get());    \
                 CreateBinOp(obj, value, op, Lloc(x));    \
             } else {    \
                 throw std::runtime_error(cxx_operator_name + " is supported only for arrays.");    \
@@ -480,7 +513,7 @@ public:
             TraverseStmt(args[1]);
             cxx_operator_name = cxx_operator_name_obj.get();
             if( cxx_operator_name.size() == 0 && print_args != nullptr && tmp != nullptr ) {
-                ASR::expr_t* arg = ASRUtils::EXPR(tmp);
+                ASR::expr_t* arg = ASRUtils::EXPR(tmp.get());
                 print_args->push_back(al, arg);
             }
             TraverseStmt(args[0]);
@@ -503,13 +536,13 @@ public:
             }
 
             TraverseStmt(args[0]);
-            ASR::expr_t* obj = ASRUtils::EXPR(tmp);
+            ASR::expr_t* obj = ASRUtils::EXPR(tmp.get());
             if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {
                 Vec<ASR::array_index_t> array_indices;
                 array_indices.reserve(al, x->getNumArgs() - 1);
                 for( size_t i = 1; i < x->getNumArgs(); i++ ) {
                     TraverseStmt(args[i]);
-                    ASR::expr_t* index = ASRUtils::EXPR(tmp);
+                    ASR::expr_t* index = ASRUtils::EXPR(tmp.get());
                     ASR::array_index_t array_index;
                     array_index.loc = index->base.loc;
                     array_index.m_left = nullptr;
@@ -531,12 +564,12 @@ public:
 
             clang::Expr** args = x->getArgs();
             TraverseStmt(args[0]);
-            ASR::expr_t* obj = ASRUtils::EXPR(tmp);
+            ASR::expr_t* obj = ASRUtils::EXPR(tmp.get());
             assignment_target = obj;
             if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {
                 TraverseStmt(args[1]);
                 if( !is_stmt_created ) {
-                    ASR::expr_t* value = ASRUtils::EXPR(tmp);
+                    ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
                     tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
                     is_stmt_created = true;
                 }
@@ -590,7 +623,7 @@ public:
                 args.push_back(al, nullptr);
                 is_all_called = false;
             } else {
-                args.push_back(al, ASRUtils::EXPR(tmp));
+                args.push_back(al, ASRUtils::EXPR(tmp.get()));
             }
         }
         assignment_target = assignment_target_copy;
@@ -749,7 +782,7 @@ public:
         TraverseStmt(x->getCallee());
         ASR::expr_t* callee = nullptr;
         if( tmp != nullptr ) {
-            callee = ASRUtils::EXPR(tmp);
+            callee = ASRUtils::EXPR(tmp.get());
         }
         if( check_and_handle_special_function(x, callee) ) {
             return true;
@@ -761,7 +794,7 @@ public:
         call_args.reserve(al, n_args);
         for( size_t i = 0; i < n_args; i++ ) {
             TraverseStmt(args[i]);
-            ASR::expr_t* arg = ASRUtils::EXPR(tmp);
+            ASR::expr_t* arg = ASRUtils::EXPR(tmp.get());
             ASR::call_arg_t call_arg;
             call_arg.loc = arg->base.loc;
             call_arg.m_value = arg;
@@ -794,9 +827,7 @@ public:
         args.reserve(al, 1);
         for (auto &p : x->parameters()) {
             TraverseDecl(p);
-            ASR::symbol_t* arg_sym = ASR::down_cast<ASR::symbol_t>(tmp);
-            args.push_back(al,
-                ASRUtils::EXPR(ASR::make_Var_t(al, arg_sym->base.loc, arg_sym)));
+            args.push_back(al, ASRUtils::EXPR(tmp.get()));
         }
 
         ASR::ttype_t* return_type = ClangTypeToASRType(x->getReturnType());
@@ -825,7 +856,7 @@ public:
             args.p, args.size(), body.p, body.size(), return_var, ASR::abiType::Source, ASR::accessType::Public,
             ASR::deftypeType::Implementation, nullptr, false, false, false, false, false, nullptr, 0,
             false, false, false);
-        parent_scope->add_symbol(name, ASR::down_cast<ASR::symbol_t>(tmp));
+        parent_scope->add_symbol(name, ASR::down_cast<ASR::symbol_t>(tmp.get()));
         current_scope = parent_scope;
         is_stmt_created = false;
         return true;
@@ -840,7 +871,7 @@ public:
         for( size_t i = 0; i < decl_group.size(); i++ ) {
             TraverseDecl(decl_group[i]);
             if( is_stmt_created ) {
-                current_body->push_back(al, ASRUtils::STMT(tmp));
+                current_body->push_back(al, ASRUtils::STMT(tmp.get()));
             }
         }
         is_stmt_created = false;
@@ -926,7 +957,7 @@ public:
             TraverseStmt(x->getInit());
             assignment_target = nullptr;
             if( tmp != nullptr && !is_stmt_created ) {
-                ASR::expr_t* init_val = ASRUtils::EXPR(tmp);
+                ASR::expr_t* init_val = ASRUtils::EXPR(tmp.get());
                 add_reshape_if_needed(init_val, var);
                 tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
                 is_stmt_created = true;
@@ -1016,7 +1047,7 @@ public:
         assignment_target = nullptr;
         for( size_t i = 0; i < x->getNumInits(); i++ ) {
             TraverseStmt(clang_inits[i]);
-            init_exprs.push_back(al, ASRUtils::EXPR(tmp));
+            init_exprs.push_back(al, ASRUtils::EXPR(tmp.get()));
         }
         assignment_target = assignment_target_copy;
         ASR::ttype_t* type = ASRUtils::expr_type(init_exprs[init_exprs.size() - 1]);
@@ -1081,9 +1112,9 @@ public:
     bool TraverseBinaryOperator(clang::BinaryOperator *x) {
         clang::BinaryOperatorKind op = x->getOpcode();
         TraverseStmt(x->getLHS());
-        ASR::expr_t* x_lhs = ASRUtils::EXPR(tmp);
+        ASR::expr_t* x_lhs = ASRUtils::EXPR(tmp.get());
         TraverseStmt(x->getRHS());
-        ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp);
+        ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp.get());
         if( op == clang::BO_Assign ) {
             tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, x_rhs, nullptr);
             is_stmt_created = true;
@@ -1117,6 +1148,11 @@ public:
                     is_cmpop = true;
                     break;
                 }
+                case clang::BO_NE: {
+                    cmpop_type = ASR::cmpopType::NotEq;
+                    is_cmpop = true;
+                    break;
+                }
                 case clang::BO_LT: {
                     cmpop_type = ASR::cmpopType::Lt;
                     is_cmpop = true;
@@ -1130,14 +1166,7 @@ public:
             if( is_binop ) {
                 CreateBinOp(x_lhs, x_rhs, binop_type, Lloc(x));
             } else if( is_cmpop ) {
-                if( ASRUtils::is_integer(*ASRUtils::expr_type(x_lhs)) &&
-                    ASRUtils::is_integer(*ASRUtils::expr_type(x_rhs)) ) {
-                    tmp = ASR::make_IntegerCompare_t(al, Lloc(x), x_lhs,
-                        cmpop_type, x_rhs, ASRUtils::expr_type(x_lhs), nullptr);
-                } else {
-                    throw std::runtime_error("Only integer type is supported so "
-                                             "far for comparison operator");
-                }
+                CreateCompareOp(x_lhs, x_rhs, cmpop_type, Lloc(x));
             } else {
                 throw std::runtime_error("Only binary operators supported so far");
             }
@@ -1221,7 +1250,7 @@ public:
             is_stmt_created = false;
             TraverseStmt(s);
             if( is_stmt_created ) {
-                current_body->push_back(al, ASRUtils::STMT(tmp));
+                current_body->push_back(al, ASRUtils::STMT(tmp.get()));
             }
             is_stmt_created_ = is_stmt_created;
         }
@@ -1232,8 +1261,8 @@ public:
         ASR::symbol_t* return_sym = current_scope->resolve_symbol("__return_var");
         ASR::expr_t* return_var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), return_sym));
         TraverseStmt(x->getRetValue());
-        tmp = ASR::make_Assignment_t(al, Lloc(x), return_var, ASRUtils::EXPR(tmp), nullptr);
-        current_body->push_back(al, ASRUtils::STMT(tmp));
+        tmp = ASR::make_Assignment_t(al, Lloc(x), return_var, ASRUtils::EXPR(tmp.get()), nullptr);
+        current_body->push_back(al, ASRUtils::STMT(tmp.get()));
         tmp = ASR::make_Return_t(al, Lloc(x));
         is_stmt_created = true;
         return true;
@@ -1263,10 +1292,10 @@ public:
     bool TraverseArraySubscriptExpr(clang::ArraySubscriptExpr* x) {
         clang::Expr* clang_array = x->getBase();
         TraverseStmt(clang_array);
-        ASR::expr_t* array = flatten_ArrayItem(ASRUtils::EXPR(tmp));
+        ASR::expr_t* array = flatten_ArrayItem(ASRUtils::EXPR(tmp.get()));
         clang::Expr* clang_index = x->getIdx();
         TraverseStmt(clang_index);
-        ASR::expr_t* index = ASRUtils::EXPR(tmp);
+        ASR::expr_t* index = ASRUtils::EXPR(tmp.get());
         Vec<ASR::array_index_t> indices; indices.reserve(al, 1);
         ASR::array_index_t array_index; array_index.loc = index->base.loc;
         array_index.m_left = nullptr; array_index.m_right = index; array_index.m_step = nullptr;
@@ -1280,11 +1309,11 @@ public:
 
     bool TraverseCompoundAssignOperator(clang::CompoundAssignOperator* x) {
         TraverseStmt(x->getLHS());
-        ASR::expr_t* x_lhs = ASRUtils::EXPR(tmp);
+        ASR::expr_t* x_lhs = ASRUtils::EXPR(tmp.get());
         TraverseStmt(x->getRHS());
-        ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp);
+        ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp.get());
         CreateBinOp(x_lhs, x_rhs, ASR::binopType::Add, Lloc(x));
-        ASR::expr_t* sum_expr = ASRUtils::EXPR(tmp);
+        ASR::expr_t* sum_expr = ASRUtils::EXPR(tmp.get());
         tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, sum_expr, nullptr);
         is_stmt_created = true;
         return true;
@@ -1296,7 +1325,7 @@ public:
             case clang::UnaryOperatorKind::UO_PostInc: {
                 clang::Expr* expr = x->getSubExpr();
                 TraverseStmt(expr);
-                ASR::expr_t* var = ASRUtils::EXPR(tmp);
+                ASR::expr_t* var = ASRUtils::EXPR(tmp.get());
                 ASR::expr_t* incbyone = ASRUtils::EXPR(ASR::make_IntegerBinOp_t(
                     al, Lloc(x), var, ASR::binopType::Add,
                     ASRUtils::EXPR(ASR::make_IntegerConstant_t(
@@ -1319,11 +1348,11 @@ public:
         clang::Stmt* init_stmt = x->getInit();
         TraverseStmt(init_stmt);
         LCOMPILERS_ASSERT(tmp != nullptr && is_stmt_created);
-        current_body->push_back(al, ASRUtils::STMT(tmp));
+        current_body->push_back(al, ASRUtils::STMT(tmp.get()));
 
         clang::Expr* loop_cond = x->getCond();
         TraverseStmt(loop_cond);
-        ASR::expr_t* test = ASRUtils::EXPR(tmp);
+        ASR::expr_t* test = ASRUtils::EXPR(tmp.get());
 
         Vec<ASR::stmt_t*> body; body.reserve(al, 1);
         Vec<ASR::stmt_t*>*current_body_copy = current_body;
@@ -1333,7 +1362,7 @@ public:
         clang::Stmt* inc_stmt = x->getInc();
         TraverseStmt(inc_stmt);
         LCOMPILERS_ASSERT(tmp != nullptr && is_stmt_created);
-        body.push_back(al, ASRUtils::STMT(tmp));
+        body.push_back(al, ASRUtils::STMT(tmp.get()));
         current_body = current_body_copy;
 
         tmp = ASR::make_WhileLoop_t(al, Lloc(x), nullptr, test, body.p, body.size());
@@ -1348,7 +1377,7 @@ public:
 
         clang::Expr* if_cond = x->getCond();
         TraverseStmt(if_cond);
-        ASR::expr_t* test = ASRUtils::EXPR(tmp);
+        ASR::expr_t* test = ASRUtils::EXPR(tmp.get());
 
         Vec<ASR::stmt_t*> then_body; then_body.reserve(al, 1);
         Vec<ASR::stmt_t*>*current_body_copy = current_body;
