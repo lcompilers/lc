@@ -24,6 +24,7 @@
 
 #include <libasr/pickle.h>
 #include <libasr/asr_utils.h>
+#include <libasr/pass/intrinsic_array_function_registry.h>
 
 #include <iostream>
 
@@ -35,6 +36,10 @@ enum SpecialFunc {
     View,
     Shape,
     Empty,
+    Fill,
+    All,
+    Any,
+    NotEqual,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -42,7 +47,32 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"exit", SpecialFunc::Exit},
     {"view", SpecialFunc::View},
     {"shape", SpecialFunc::Shape},
-    {"empty", SpecialFunc::Empty}
+    {"empty", SpecialFunc::Empty},
+    {"fill", SpecialFunc::Fill},
+    {"all", SpecialFunc::All},
+    {"any", SpecialFunc::Any},
+    {"not_equal", SpecialFunc::NotEqual},
+};
+
+class OneTimeUseString {
+
+    private:
+
+        std::string value;
+
+    public:
+
+        OneTimeUseString(): value{""} {}
+
+        std::string get() {
+            std::string value_ = value;
+            value = "";
+            return value_;
+        }
+
+        void set(std::string value_) {
+            value = value_;
+        }
 };
 
 class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
@@ -57,17 +87,17 @@ public:
     Vec<ASR::stmt_t*>* current_body;
     bool is_stmt_created;
     std::vector<std::map<std::string, std::string>> scopes;
-    std::string cxx_operator_name, member_name;
+    OneTimeUseString cxx_operator_name_obj, member_name_obj;
     ASR::expr_t* assignment_target;
     Vec<ASR::expr_t*>* print_args;
+    bool is_all_called;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
         Context(Context_), al{al_}, tu{tu_},
         tmp{nullptr}, current_body{nullptr},
-        is_stmt_created{true}, cxx_operator_name{""},
-        member_name{""}, assignment_target{nullptr},
-        print_args{nullptr} {}
+        is_stmt_created{true}, assignment_target{nullptr},
+        print_args{nullptr}, is_all_called{false} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -408,41 +438,53 @@ public:
     }
 
     bool TraverseMemberExpr(clang::MemberExpr* x) {
-        member_name = x->getMemberDecl()->getNameAsString();
+        member_name_obj.set(x->getMemberDecl()->getNameAsString());
         return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseMemberExpr(x);
     }
 
     bool TraverseCXXMemberCallExpr(clang::CXXMemberCallExpr* x) {
         clang::Expr* callee = x->getCallee();
-        member_name.clear();
         TraverseStmt(callee);
         ASR::expr_t* asr_callee = ASRUtils::EXPR(tmp);
         if( !check_and_handle_special_function(x, asr_callee) ) {
-             throw std::runtime_error("Only xt::xtensor::shape is supported.");
+             throw std::runtime_error("Only xt::xtensor::shape, xt::xtensor::fill is supported.");
         }
 
-        member_name.clear();
         return true;
     }
 
     bool TraverseCXXOperatorCallExpr(clang::CXXOperatorCallExpr* x) {
+        #define generate_code_for_binop(op) if( x->getNumArgs() != 2 ) {    \
+                throw std::runtime_error(cxx_operator_name + " accepts two arguments, found " + std::to_string(x->getNumArgs()));    \
+            }    \
+            clang::Expr** args = x->getArgs();    \
+            TraverseStmt(args[0]);    \
+            ASR::expr_t* obj = ASRUtils::EXPR(tmp);    \
+            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {    \
+                TraverseStmt(args[1]);    \
+                ASR::expr_t* value = ASRUtils::EXPR(tmp);    \
+                CreateBinOp(obj, value, op, Lloc(x));    \
+            } else {    \
+                throw std::runtime_error(cxx_operator_name + " is supported only for arrays.");    \
+            }    \
+
         clang::Expr* callee = x->getCallee();
-        cxx_operator_name.clear();
         TraverseStmt(callee);
+        std::string cxx_operator_name = cxx_operator_name_obj.get();
         if( cxx_operator_name == "operator<<" ) {
             if( print_args == nullptr ) {
                 print_args = al.make_new<Vec<ASR::expr_t*>>();
                 print_args->reserve(al, 1);
             }
             clang::Expr** args = x->getArgs();
-            cxx_operator_name.clear();
             TraverseStmt(args[1]);
+            cxx_operator_name = cxx_operator_name_obj.get();
             if( cxx_operator_name.size() == 0 && print_args != nullptr && tmp != nullptr ) {
                 ASR::expr_t* arg = ASRUtils::EXPR(tmp);
                 print_args->push_back(al, arg);
             }
-            cxx_operator_name.clear();
             TraverseStmt(args[0]);
+            cxx_operator_name = cxx_operator_name_obj.get();
             if( cxx_operator_name == "cout" ) {
                 Vec<ASR::expr_t*> print_args_vec;
                 print_args_vec.reserve(al, print_args->size());
@@ -503,24 +545,12 @@ public:
                 throw std::runtime_error("operator= is supported only for arrays.");
             }
         } else if( cxx_operator_name == "operator+" ) {
-            if( x->getNumArgs() != 2 ) {
-                throw std::runtime_error("operator+ accepts two arguments, found " + std::to_string(x->getNumArgs()));
-            }
-
-            clang::Expr** args = x->getArgs();
-            TraverseStmt(args[0]);
-            ASR::expr_t* obj = ASRUtils::EXPR(tmp);
-            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {
-                TraverseStmt(args[1]);
-                ASR::expr_t* value = ASRUtils::EXPR(tmp);
-                CreateBinOp(obj, value, ASR::binopType::Add, Lloc(x));
-            } else {
-                throw std::runtime_error("operator= is supported only for arrays.");
-            }
+            generate_code_for_binop(ASR::binopType::Add)
+        } else if( cxx_operator_name == "operator*" ) {
+            generate_code_for_binop(ASR::binopType::Mul)
         } else {
-            throw std::runtime_error("Only std::ostream and operator() are supported, found " + cxx_operator_name);
+            throw std::runtime_error("C++ operator is not supported yet, " + cxx_operator_name);
         }
-        cxx_operator_name.clear();
         return true;
     }
 
@@ -528,6 +558,8 @@ public:
     bool check_and_handle_special_function(
         CallExprType *x, ASR::expr_t* callee) {
         std::string func_name;
+        std::string cxx_operator_name = cxx_operator_name_obj.get();
+        std::string member_name = member_name_obj.get();
         if( cxx_operator_name.size() > 0 ) {
             func_name = cxx_operator_name;
         } else if( member_name.size() > 0 ) {
@@ -554,7 +586,12 @@ public:
                 skip_format_str = false;
                 continue;
             }
-            args.push_back(al, ASRUtils::EXPR(tmp));
+            if( tmp == nullptr && is_all_called ) {
+                args.push_back(al, nullptr);
+                is_all_called = false;
+            } else {
+                args.push_back(al, ASRUtils::EXPR(tmp));
+            }
         }
         assignment_target = assignment_target_copy;
         if (sf == SpecialFunc::Printf) {
@@ -568,15 +605,25 @@ public:
             size_t i, j, result_dims = 0;
             for( i = 0, j = 1; j < args.size(); j++, i++ ) {
                 ASR::array_index_t index;
-                index.loc = args.p[j]->base.loc;
-                index.m_left = nullptr;
-                index.m_right = args.p[j];
-                index.m_step = nullptr;
-                array_section_indices.push_back(al, index);
+                if( args.p[j] == nullptr ) {
+                    index.loc = array->base.loc;
+                    index.m_left = ASRUtils::get_bound<SemanticError>(array, i + 1, "lbound", al);
+                    index.m_right = ASRUtils::get_bound<SemanticError>(array, i + 1, "ubound", al);
+                    index.m_step = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, index.loc, 1,
+                        ASRUtils::TYPE(ASR::make_Integer_t(al, index.loc, 4))));
+                    array_section_indices.push_back(al, index);
+                    result_dims += 1;
+                } else {
+                    index.loc = args.p[j]->base.loc;
+                    index.m_left = nullptr;
+                    index.m_right = args.p[j];
+                    index.m_step = nullptr;
+                    array_section_indices.push_back(al, index);
+                }
             }
             for( ; i < rank; i++ ) {
                 ASR::array_index_t index;
-                index.loc = callee->base.loc;
+                index.loc = array->base.loc;
                 index.m_left = ASRUtils::get_bound<SemanticError>(array, i + 1, "lbound", al);
                 index.m_right = ASRUtils::get_bound<SemanticError>(array, i + 1, "ubound", al);
                 index.m_step = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, index.loc, 1,
@@ -616,9 +663,41 @@ public:
             tmp = ASR::make_ArraySize_t(al, Lloc(x), callee, dim,
                 ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)),
                 nullptr);
+        } else if (sf == SpecialFunc::Fill) {
+            if( args.size() != 1 ) {
+                throw std::runtime_error("xt::xtensor::fill should be called with only one argument.");
+            }
+            if( ASRUtils::is_array(ASRUtils::expr_type(args.p[0])) ) {
+                throw std::runtime_error("Argument of xt::xtensor::fill should be a scalar.");
+            }
+
+            ASR::expr_t* arg = args.p[0];
+            ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), callee, arg);
+            tmp = ASR::make_Assignment_t(al, Lloc(x), callee, arg, nullptr);
+            is_stmt_created = true;
+        } else if( sf == SpecialFunc::All ) {
+            // Handles xt::all() - no arguments
+            // Handle with argument case later.
+            is_all_called = true;
+            tmp = nullptr;
+        } else if( sf == SpecialFunc::Any ) {
+            tmp = ASRUtils::make_IntrinsicArrayFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicArrayFunctions::Any),
+                args.p, args.size(), 0, ASRUtils::TYPE(ASR::make_Logical_t(
+                    al, Lloc(x), 4)), nullptr);
+        } else if( sf == SpecialFunc::NotEqual ) {
+            ASR::expr_t* arg1 = args.p[0];
+            ASR::expr_t* arg2 = args.p[1];
+            CreateCompareOp(arg1, arg2, ASR::cmpopType::NotEq, Lloc(x));
         } else if (sf == SpecialFunc::Exit) {
             LCOMPILERS_ASSERT(args.size() == 1);
-            tmp = ASR::make_Stop_t(al, Lloc(x), args[0]);
+            int code = 0;
+            ASRUtils::extract_value(args[0], code);
+            if( code != 0 ) {
+                tmp = ASR::make_ErrorStop_t(al, Lloc(x), args[0]);
+            } else {
+                tmp = ASR::make_Stop_t(al, Lloc(x), args[0]);
+            }
             is_stmt_created = true;
         } else if (sf == SpecialFunc::Empty) {
             if( args.size() != 1 ) {
@@ -667,7 +746,6 @@ public:
     }
 
     bool TraverseCallExpr(clang::CallExpr *x) {
-        cxx_operator_name.clear();
         TraverseStmt(x->getCallee());
         ASR::expr_t* callee = nullptr;
         if( tmp != nullptr ) {
@@ -959,8 +1037,33 @@ public:
         return true;
     }
 
+    void CreateCompareOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
+        ASR::cmpopType cmpop_type, const Location& loc) {
+        ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
+        ASR::dimension_t* m_dims;
+        size_t n_dims = ASRUtils::extract_dimensions_from_ttype(
+            ASRUtils::expr_type(lhs), m_dims);
+        ASR::ttype_t* result_type = ASRUtils::TYPE(ASR::make_Logical_t(al, loc, 4));
+        if( n_dims > 0 ) {
+            result_type = ASRUtils::make_Array_t_util(al, loc, result_type, m_dims, n_dims);
+        }
+        if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
+            ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_IntegerCompare_t(al, loc, lhs,
+                cmpop_type, rhs, result_type, nullptr);
+        } else if( ASRUtils::is_real(*ASRUtils::expr_type(lhs)) &&
+                   ASRUtils::is_real(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_RealCompare_t(al, loc, lhs,
+                cmpop_type, rhs, result_type, nullptr);
+        }  else {
+            throw SemanticError("Only integer and real types are supported so "
+                "far for comparison operator", loc);
+        }
+    }
+
     void CreateBinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
         ASR::binopType binop_type, const Location& loc) {
+        ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
         if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
             ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
@@ -1064,16 +1167,24 @@ public:
     }
 
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
-        cxx_operator_name.clear();
         std::string name = x->getNameInfo().getAsString();
         ASR::symbol_t* sym = resolve_symbol(name);
-        if( sym == nullptr &&
-            (name == "operator<<" || name == "cout" ||
+        if( name == "operator<<" || name == "cout" ||
             name == "endl" || name == "operator()" ||
             name == "operator+" || name == "operator=" ||
-            name == "view" || name == "empty" || name == "printf") ) {
-            cxx_operator_name = name;
+            name == "operator*" || name == "view" ||
+            name == "empty" || name == "all" ||
+            name == "any" || name == "not_equal" ||
+            name == "exit" || name == "printf" ) {
+            if( sym != nullptr ) {
+                throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
+            }
+            cxx_operator_name_obj.set(name);
+            tmp = nullptr;
             return true;
+        }
+        if( sym == nullptr ) {
+            throw std::runtime_error("Symbol " + name + " not found in current scope.");
         }
         tmp = ASR::make_Var_t(al, Lloc(x), sym);
         is_stmt_created = false;
@@ -1226,6 +1337,37 @@ public:
         current_body = current_body_copy;
 
         tmp = ASR::make_WhileLoop_t(al, Lloc(x), nullptr, test, body.p, body.size());
+        is_stmt_created = true;
+        scopes.pop_back();
+        return true;
+    }
+
+    bool TraverseIfStmt(clang::IfStmt* x) {
+        std::map<std::string, std::string> alias;
+        scopes.push_back(alias);
+
+        clang::Expr* if_cond = x->getCond();
+        TraverseStmt(if_cond);
+        ASR::expr_t* test = ASRUtils::EXPR(tmp);
+
+        Vec<ASR::stmt_t*> then_body; then_body.reserve(al, 1);
+        Vec<ASR::stmt_t*>*current_body_copy = current_body;
+        current_body = &then_body;
+        clang::Stmt* clang_then_body = x->getThen();
+        TraverseStmt(clang_then_body);
+        current_body = current_body_copy;
+
+        Vec<ASR::stmt_t*> else_body; else_body.reserve(al, 1);
+        if( x->hasElseStorage() ) {
+            Vec<ASR::stmt_t*>*current_body_copy = current_body;
+            current_body = &else_body;
+            clang::Stmt* clang_else_body = x->getElse();
+            TraverseStmt(clang_else_body);
+            current_body = current_body_copy;
+        }
+
+        tmp = ASR::make_If_t(al, Lloc(x), test, then_body.p,
+            then_body.size(), else_body.p, else_body.size());
         is_stmt_created = true;
         scopes.pop_back();
         return true;
