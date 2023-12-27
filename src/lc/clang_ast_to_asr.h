@@ -433,6 +433,11 @@ public:
             name = current_scope->get_unique_name("param");
         }
         ASR::ttype_t* type = ClangTypeToASRType(x->getType());
+        ASR::intentType intent_type = ASR::intentType::InOut;
+        if( ASR::is_a<ASR::Const_t>(*type) ) {
+            intent_type = ASR::intentType::In;
+            type = ASRUtils::type_get_past_const(type);
+        }
         if( x->getType()->getTypeClass() != clang::Type::LValueReference &&
             ASRUtils::is_array(type) ) {
             throw std::runtime_error("Array objects should be passed by reference only.");
@@ -1188,8 +1193,8 @@ public:
             tmp = ASR::make_RealCompare_t(al, loc, lhs,
                 cmpop_type, rhs, result_type, nullptr);
         }  else {
-            throw SemanticError("Only integer and real types are supported so "
-                "far for comparison operator", loc);
+            throw std::runtime_error("Only integer and real types are supported so "
+                "far for comparison operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs)));
         }
     }
 
@@ -1205,8 +1210,8 @@ public:
             tmp = ASR::make_RealBinOp_t(al, loc, lhs,
                 binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
         }  else {
-            throw SemanticError("Only integer and real types are supported so "
-                "far for binary operator", loc);
+            throw std::runtime_error("Only integer and real types are supported so "
+                "far for binary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs)));
         }
     }
 
@@ -1441,7 +1446,7 @@ public:
                 break;
             }
             default: {
-                throw SemanticError("Only postfix increment is supported so far", Lloc(x));
+                throw std::runtime_error("Only postfix increment is supported so far");
             }
         }
         return true;
