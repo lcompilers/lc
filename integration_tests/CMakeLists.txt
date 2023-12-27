@@ -198,3 +198,5 @@ RUN(NAME array_09.cpp LABELS gcc llvm NOFAST
     EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
 RUN(NAME array_10.cpp LABELS gcc llvm NOFAST
     EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
+RUN(NAME array_11.cpp LABELS gcc llvm NOFAST
+    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
