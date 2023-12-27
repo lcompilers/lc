@@ -40,6 +40,10 @@ enum SpecialFunc {
     All,
     Any,
     NotEqual,
+    Exp,
+    Abs,
+    AMax,
+    Sum,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -52,6 +56,10 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"all", SpecialFunc::All},
     {"any", SpecialFunc::Any},
     {"not_equal", SpecialFunc::NotEqual},
+    {"exp", SpecialFunc::Exp},
+    {"abs", SpecialFunc::Abs},
+    {"amax", SpecialFunc::AMax},
+    {"sum", SpecialFunc::Sum},
 };
 
 class OneTimeUseString {
@@ -501,6 +509,20 @@ public:
                 throw std::runtime_error(cxx_operator_name + " is supported only for arrays.");    \
             }    \
 
+        #define generate_code_for_cmpop(op) if( x->getNumArgs() != 2 ) {    \
+                throw std::runtime_error(cxx_operator_name + " accepts two arguments, found " + std::to_string(x->getNumArgs()));    \
+            }    \
+            clang::Expr** args = x->getArgs();    \
+            TraverseStmt(args[0]);    \
+            ASR::expr_t* obj = ASRUtils::EXPR(tmp.get());    \
+            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {    \
+                TraverseStmt(args[1]);    \
+                ASR::expr_t* value = ASRUtils::EXPR(tmp.get());    \
+                CreateCompareOp(obj, value, op, Lloc(x));    \
+            } else {    \
+                throw std::runtime_error(cxx_operator_name + " is supported only for arrays.");    \
+            }    \
+
         clang::Expr* callee = x->getCallee();
         TraverseStmt(callee);
         std::string cxx_operator_name = cxx_operator_name_obj.get();
@@ -578,9 +600,15 @@ public:
                 throw std::runtime_error("operator= is supported only for arrays.");
             }
         } else if( cxx_operator_name == "operator+" ) {
-            generate_code_for_binop(ASR::binopType::Add)
+            generate_code_for_binop(ASR::binopType::Add);
+        } else if( cxx_operator_name == "operator-" ) {
+            generate_code_for_binop(ASR::binopType::Sub);
+        } else if( cxx_operator_name == "operator/" ) {
+            generate_code_for_binop(ASR::binopType::Div);
         } else if( cxx_operator_name == "operator*" ) {
-            generate_code_for_binop(ASR::binopType::Mul)
+            generate_code_for_binop(ASR::binopType::Mul);
+        } else if( cxx_operator_name == "operator>" ) {
+            generate_code_for_cmpop(ASR::cmpopType::Gt);
         } else {
             throw std::runtime_error("C++ operator is not supported yet, " + cxx_operator_name);
         }
@@ -619,11 +647,14 @@ public:
                 skip_format_str = false;
                 continue;
             }
-            if( tmp == nullptr && is_all_called ) {
+            if( (tmp == nullptr && is_all_called) ||
+                (tmp == nullptr || p->getStmtClass() ==
+                    clang::Stmt::StmtClass::CXXDefaultArgExprClass ) ) {
                 args.push_back(al, nullptr);
                 is_all_called = false;
             } else {
-                args.push_back(al, ASRUtils::EXPR(tmp.get()));
+                ASR::asr_t* tmp_ = tmp.get();
+                args.push_back(al, ASRUtils::EXPR(tmp_));
             }
         }
         assignment_target = assignment_target_copy;
@@ -718,6 +749,30 @@ public:
                 static_cast<int64_t>(ASRUtils::IntrinsicArrayFunctions::Any),
                 args.p, args.size(), 0, ASRUtils::TYPE(ASR::make_Logical_t(
                     al, Lloc(x), 4)), nullptr);
+        } else if( sf == SpecialFunc::Exp ) {
+            tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Exp),
+                args.p, args.size(), 0, ASRUtils::expr_type(args.p[0]), nullptr);
+        } else if( sf == SpecialFunc::Abs ) {
+            tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Abs),
+                args.p, args.size(), 0, ASRUtils::expr_type(args.p[0]), nullptr);
+        } else if( sf == SpecialFunc::AMax ) {
+            if( args.size() > 1 && args.p[1] != nullptr ) {
+                throw std::runtime_error("dim argument not yet supported with " + func_name);
+            }
+            tmp = ASRUtils::make_IntrinsicArrayFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicArrayFunctions::MaxVal),
+                args.p, 1, 0, ASRUtils::extract_type(ASRUtils::expr_type(args.p[0])),
+                nullptr);
+        }  else if( sf == SpecialFunc::Sum ) {
+            if( args.size() > 1 && args.p[1] != nullptr ) {
+                throw std::runtime_error("dim argument not yet supported with " + func_name);
+            }
+            tmp = ASRUtils::make_IntrinsicArrayFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicArrayFunctions::Sum),
+                args.p, 1, 0, ASRUtils::extract_type(ASRUtils::expr_type(args.p[0])),
+                nullptr);
         } else if( sf == SpecialFunc::NotEqual ) {
             ASR::expr_t* arg1 = args.p[0];
             ASR::expr_t* arg2 = args.p[1];
@@ -1204,7 +1259,11 @@ public:
             name == "operator*" || name == "view" ||
             name == "empty" || name == "all" ||
             name == "any" || name == "not_equal" ||
-            name == "exit" || name == "printf" ) {
+            name == "exit" || name == "printf" ||
+            name == "exp" || name == "sum" ||
+            name == "amax" || name == "abs" ||
+            name == "operator-" || name == "operator/" ||
+            name == "operator>" ) {
             if( sym != nullptr ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
             }
