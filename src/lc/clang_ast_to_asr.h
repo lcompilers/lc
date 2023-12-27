@@ -44,6 +44,7 @@ enum SpecialFunc {
     Abs,
     AMax,
     Sum,
+    Range,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -60,6 +61,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"abs", SpecialFunc::Abs},
     {"amax", SpecialFunc::AMax},
     {"sum", SpecialFunc::Sum},
+    {"range", SpecialFunc::Range},
 };
 
 class OneTimeUseString {
@@ -129,14 +131,15 @@ public:
     OneTimeUseString cxx_operator_name_obj, member_name_obj;
     ASR::expr_t* assignment_target;
     Vec<ASR::expr_t*>* print_args;
-    bool is_all_called;
+    bool is_all_called, is_range_called;
+    OneTimeUseASRNode<ASR::expr_t> range_start, range_end, range_step;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
         Context(Context_), al{al_}, tu{tu_},
         current_body{nullptr}, is_stmt_created{true},
         assignment_target{nullptr}, print_args{nullptr},
-        is_all_called{false} {}
+        is_all_called{false}, is_range_called{false} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -638,49 +641,78 @@ public:
         SpecialFunc sf = special_function_map[func_name];
         Vec<ASR::expr_t*> args;
         args.reserve(al, 1);
-        bool skip_format_str = true;
-        ASR::expr_t* assignment_target_copy = assignment_target;
-        assignment_target = nullptr;
-        for (auto *p : x->arguments()) {
-            TraverseStmt(p);
-            if (sf == SpecialFunc::Printf && skip_format_str) {
-                skip_format_str = false;
-                continue;
+        if( sf != SpecialFunc::View ) {
+            bool skip_format_str = true;
+            ASR::expr_t* assignment_target_copy = assignment_target;
+            assignment_target = nullptr;
+            for (auto *p : x->arguments()) {
+                TraverseStmt(p);
+                if (sf == SpecialFunc::Printf && skip_format_str) {
+                    skip_format_str = false;
+                    continue;
+                }
+                if( (tmp == nullptr || p->getStmtClass() ==
+                     clang::Stmt::StmtClass::CXXDefaultArgExprClass ) ) {
+                    args.push_back(al, nullptr);
+                } else {
+                    ASR::asr_t* tmp_ = tmp.get();
+                    args.push_back(al, ASRUtils::EXPR(tmp_));
+                }
             }
-            if( (tmp == nullptr && is_all_called) ||
-                (tmp == nullptr || p->getStmtClass() ==
-                    clang::Stmt::StmtClass::CXXDefaultArgExprClass ) ) {
-                args.push_back(al, nullptr);
-                is_all_called = false;
-            } else {
-                ASR::asr_t* tmp_ = tmp.get();
-                args.push_back(al, ASRUtils::EXPR(tmp_));
-            }
+            assignment_target = assignment_target_copy;
         }
-        assignment_target = assignment_target_copy;
         if (sf == SpecialFunc::Printf) {
             tmp = ASR::make_Print_t(al, Lloc(x), args.p, args.size(), nullptr, nullptr);
             is_stmt_created = true;
         } else if (sf == SpecialFunc::View) {
-            ASR::expr_t* array = args.p[0];
+            clang::Expr** view_args = x->getArgs();
+            size_t view_nargs = x->getNumArgs();
+            ASR::expr_t* assignment_target_copy = assignment_target;
+            assignment_target = nullptr;
+            TraverseStmt(view_args[0]);
+            assignment_target = assignment_target_copy;
+            ASR::expr_t* array = ASRUtils::EXPR(tmp.get());
             size_t rank = ASRUtils::extract_n_dims_from_ttype(ASRUtils::expr_type(array));
             Vec<ASR::array_index_t> array_section_indices;
             array_section_indices.reserve(al, rank);
             size_t i, j, result_dims = 0;
-            for( i = 0, j = 1; j < args.size(); j++, i++ ) {
+            for( i = 0, j = 1; j < view_nargs; j++, i++ ) {
+                ASR::expr_t* assignment_target_copy = assignment_target;
+                assignment_target = nullptr;
+                TraverseStmt(view_args[j]);
+                assignment_target = assignment_target_copy;
                 ASR::array_index_t index;
-                if( args.p[j] == nullptr ) {
+                if( (tmp == nullptr && (is_all_called || is_range_called)) ||
+                    (tmp == nullptr || view_args[j]->getStmtClass() ==
+                        clang::Stmt::StmtClass::CXXDefaultArgExprClass ) ) {
                     index.loc = array->base.loc;
-                    index.m_left = ASRUtils::get_bound<SemanticError>(array, i + 1, "lbound", al);
-                    index.m_right = ASRUtils::get_bound<SemanticError>(array, i + 1, "ubound", al);
-                    index.m_step = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, index.loc, 1,
-                        ASRUtils::TYPE(ASR::make_Integer_t(al, index.loc, 4))));
-                    array_section_indices.push_back(al, index);
+                    if( is_range_called ) {
+                        index.m_left = range_start.get();
+                        ASR::expr_t* range_end_ = range_end.get();
+                        CreateBinOp(range_end_,
+                            ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, index.loc,
+                            1, ASRUtils::expr_type(range_end_))),
+                            ASR::binopType::Sub, index.loc);
+                        index.m_right = ASRUtils::EXPR(tmp.get());
+                        index.m_step = range_step.get();
+                        array_section_indices.push_back(al, index);
+                    } else if( is_all_called ) {
+                        index.m_left = ASRUtils::get_bound<SemanticError>(array, i + 1, "lbound", al);
+                        index.m_right = ASRUtils::get_bound<SemanticError>(array, i + 1, "ubound", al);
+                        index.m_step = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, index.loc, 1,
+                            ASRUtils::TYPE(ASR::make_Integer_t(al, index.loc, 4))));
+                        array_section_indices.push_back(al, index);
+                    } else {
+                        throw std::runtime_error("Neither xt::range nor xt::all is being called for slicing array.");
+                    }
+                    is_range_called = false;
+                    is_all_called = false;
                     result_dims += 1;
                 } else {
-                    index.loc = args.p[j]->base.loc;
+                    ASR::expr_t* arg_ = ASRUtils::EXPR(tmp.get());
+                    index.loc = arg_->base.loc;
                     index.m_left = nullptr;
-                    index.m_right = args.p[j];
+                    index.m_right = arg_;
                     index.m_step = nullptr;
                     array_section_indices.push_back(al, index);
                 }
@@ -743,6 +775,20 @@ public:
             // Handles xt::all() - no arguments
             // Handle with argument case later.
             is_all_called = true;
+            tmp = nullptr;
+        } else if( sf == SpecialFunc::Range ) {
+            if( args.size() < 2 ) {
+                throw std::runtime_error("xt::range accepts at least 2 arguments.");
+            }
+            range_start = args.p[0];
+            range_end = args.p[1];
+            if( args.size() > 2 ) {
+                range_step = args.p[2];
+            } else {
+                range_step = ASRUtils::EXPR(ASR::make_IntegerConstant_t(
+                    al, args.p[0]->base.loc, 1, ASRUtils::expr_type(args.p[0])));
+            }
+            is_range_called = true;
             tmp = nullptr;
         } else if( sf == SpecialFunc::Any ) {
             tmp = ASRUtils::make_IntrinsicArrayFunction_t_util(al, Lloc(x),
@@ -1259,7 +1305,8 @@ public:
             name == "all" || name == "any" || name == "not_equal" ||
             name == "exit" || name == "printf" || name == "exp" ||
             name == "sum" || name == "amax" || name == "abs" ||
-            name == "operator-" || name == "operator/" || name == "operator>" ) {
+            name == "operator-" || name == "operator/" || name == "operator>" ||
+            name == "range" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
