@@ -412,7 +412,7 @@ namespace LCompilers {
                 builder->CreateStore(stride, s_val);
                 llvm::Value* l_val = llvm_utils->create_gep(dim_val, 1);
                 llvm::Value* dim_size_ptr = llvm_utils->create_gep(dim_val, 2);
-                builder->CreateStore(llvm::ConstantInt::get(context, llvm::APInt(32, 1)), l_val);
+                builder->CreateStore(llvm::ConstantInt::get(context, llvm::APInt(32, 0)), l_val);
                 llvm::Value* dim_size = this->get_dimension_size(
                    this->get_pointer_to_dimension_descriptor(source_dim_des_arr,
                     llvm::ConstantInt::get(context, llvm::APInt(32, r))));
@@ -464,7 +464,7 @@ namespace LCompilers {
                     llvm::Value* target_stride = get_stride(target_dim_des, false);
                     builder->CreateStore(value_stride, target_stride);
                     // Diverges from LPython, 0 should be stored there.
-                    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), llvm::APInt(32, 1)),
+                    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), llvm::APInt(32, 0)),
                                          get_lower_bound(target_dim_des, false));
                     builder->CreateStore(dim_length,
                                          get_dimension_size(target_dim_des, false));
@@ -517,7 +517,7 @@ namespace LCompilers {
                     llvm::Value* target_dim_des = llvm_utils->create_ptr_gep(target_dim_des_array, j);
                     builder->CreateStore(stride,
                                          get_stride(target_dim_des, false));
-                    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), llvm::APInt(32, 1)),
+                    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), llvm::APInt(32, 0)),
                                          get_lower_bound(target_dim_des, false));
                     builder->CreateStore(dim_length,
                                          get_dimension_size(target_dim_des, false));

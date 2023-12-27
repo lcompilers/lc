@@ -1796,8 +1796,9 @@ static inline bool is_pointer(ASR::ttype_t *x) {
 static inline bool is_integer(ASR::ttype_t &x) {
     return ASR::is_a<ASR::Integer_t>(
         *type_get_past_array(
-            type_get_past_allocatable(
-                type_get_past_pointer(&x))));
+                type_get_past_allocatable(
+                    type_get_past_pointer(
+                        type_get_past_const(&x)))));
 }
 
 static inline bool is_unsigned_integer(ASR::ttype_t &x) {
@@ -1810,8 +1811,9 @@ static inline bool is_unsigned_integer(ASR::ttype_t &x) {
 static inline bool is_real(ASR::ttype_t &x) {
     return ASR::is_a<ASR::Real_t>(
         *type_get_past_array(
-            type_get_past_allocatable(
-                type_get_past_pointer(&x))));
+                type_get_past_allocatable(
+                    type_get_past_pointer(
+                        type_get_past_const(&x)))));
 }
 
 static inline bool is_character(ASR::ttype_t &x) {
@@ -1978,7 +1980,8 @@ inline int extract_dimensions_from_ttype(ASR::ttype_t *x,
 static inline ASR::ttype_t *extract_type(ASR::ttype_t *type) {
     return type_get_past_array(
             type_get_past_allocatable(
-                type_get_past_pointer(type)));
+                type_get_past_pointer(
+                    type_get_past_const(type))));
 }
 
 static inline bool is_fixed_size_array(ASR::dimension_t* m_dims, size_t n_dims) {
