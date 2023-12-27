@@ -1253,23 +1253,22 @@ public:
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
         ASR::symbol_t* sym = resolve_symbol(name);
-        if( name == "operator<<" || name == "cout" ||
-            name == "endl" || name == "operator()" ||
-            name == "operator+" || name == "operator=" ||
-            name == "operator*" || name == "view" ||
-            name == "empty" || name == "all" ||
-            name == "any" || name == "not_equal" ||
-            name == "exit" || name == "printf" ||
-            name == "exp" || name == "sum" ||
-            name == "amax" || name == "abs" ||
-            name == "operator-" || name == "operator/" ||
-            name == "operator>" ) {
-            if( sym != nullptr ) {
+        if( name == "operator<<" || name == "cout" || name == "endl" ||
+            name == "operator()" || name == "operator+" || name == "operator=" ||
+            name == "operator*" || name == "view" || name == "empty" ||
+            name == "all" || name == "any" || name == "not_equal" ||
+            name == "exit" || name == "printf" || name == "exp" ||
+            name == "sum" || name == "amax" || name == "abs" ||
+            name == "operator-" || name == "operator/" || name == "operator>" ) {
+            if( sym != nullptr && ASR::is_a<ASR::Function_t>(
+                    *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
             }
-            cxx_operator_name_obj.set(name);
-            tmp = nullptr;
-            return true;
+            if( sym == nullptr ) {
+                cxx_operator_name_obj.set(name);
+                tmp = nullptr;
+                return true;
+            }
         }
         if( sym == nullptr ) {
             throw std::runtime_error("Symbol " + name + " not found in current scope.");
