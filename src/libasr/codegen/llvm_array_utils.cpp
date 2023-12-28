@@ -602,7 +602,7 @@ namespace LCompilers {
             int n_args, bool check_for_bounds, bool is_unbounded_pointer_to_data) {
             llvm::Value* prod = llvm::ConstantInt::get(context, llvm::APInt(32, 1));
             llvm::Value* idx = llvm::ConstantInt::get(context, llvm::APInt(32, 0));
-            for( int r = 0, r1 = 0; r < n_args; r++ ) {
+            for( int r = n_args - 1, r1 = 2*n_args - 2; r >= 0; r-- ) {
                 llvm::Value* curr_llvm_idx = m_args[r];
                 llvm::Value* lval = llvm_diminfo[r1];
                 curr_llvm_idx = builder->CreateSub(curr_llvm_idx, lval);
@@ -611,10 +611,10 @@ namespace LCompilers {
                 }
                 idx = builder->CreateAdd(idx, builder->CreateMul(prod, curr_llvm_idx));
                 if (is_unbounded_pointer_to_data) {
-                    r1 += 1;
+                    r1 -= 1;
                 } else {
                     llvm::Value* dim_size = llvm_diminfo[r1 + 1];
-                    r1 += 2;
+                    r1 -= 2;
                     prod = builder->CreateMul(prod, dim_size);
                 }
             }
