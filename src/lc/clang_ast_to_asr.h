@@ -45,6 +45,8 @@ enum SpecialFunc {
     AMax,
     Sum,
     Range,
+    Size,
+    Pow,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -62,6 +64,8 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"amax", SpecialFunc::AMax},
     {"sum", SpecialFunc::Sum},
     {"range", SpecialFunc::Range},
+    {"size", SpecialFunc::Size},
+    {"pow", SpecialFunc::Pow},
 };
 
 class OneTimeUseString {
@@ -438,6 +442,9 @@ public:
             intent_type = ASR::intentType::In;
             type = ASRUtils::type_get_past_const(type);
         }
+        if( ASRUtils::is_allocatable(type) ) {
+            type = ASRUtils::type_get_past_allocatable(type);
+        }
         if( x->getType()->getTypeClass() != clang::Type::LValueReference &&
             ASRUtils::is_array(type) ) {
             throw std::runtime_error("Array objects should be passed by reference only.");
@@ -496,7 +503,8 @@ public:
         TraverseStmt(callee);
         ASR::expr_t* asr_callee = ASRUtils::EXPR(tmp.get());
         if( !check_and_handle_special_function(x, asr_callee) ) {
-             throw std::runtime_error("Only xt::xtensor::shape, xt::xtensor::fill is supported.");
+             throw std::runtime_error("Only xt::xtensor::shape, "
+                "xt::xtensor::fill, xt::xtensor::size is supported.");
         }
 
         return true;
@@ -764,6 +772,14 @@ public:
             tmp = ASR::make_ArraySize_t(al, Lloc(x), callee, dim,
                 ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)),
                 nullptr);
+        } else if (sf == SpecialFunc::Size) {
+            if( args.size() != 0 ) {
+                throw std::runtime_error("xt::xtensor::size should be called with only one argument.");
+            }
+
+            tmp = ASR::make_ArraySize_t(al, Lloc(x), callee, nullptr,
+                ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)),
+                nullptr);
         } else if (sf == SpecialFunc::Fill) {
             if( args.size() != 1 ) {
                 throw std::runtime_error("xt::xtensor::fill should be called with only one argument.");
@@ -804,6 +820,12 @@ public:
             tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
                 static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Exp),
                 args.p, args.size(), 0, ASRUtils::expr_type(args.p[0]), nullptr);
+        } else if( sf == SpecialFunc::Pow ) {
+            if( args.size() != 2 ) {
+                throw std::runtime_error("Pow accepts exactly two arguments.");
+            }
+
+            CreateBinOp(args.p[0], args.p[1], ASR::binopType::Pow, Lloc(x));
         } else if( sf == SpecialFunc::Abs ) {
             tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
                 static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Abs),
@@ -1215,6 +1237,19 @@ public:
         }
     }
 
+    void CreateUnaryMinus(ASR::expr_t* op, const Location& loc) {
+        if( ASRUtils::is_integer(*ASRUtils::expr_type(op)) ) {
+            tmp = ASR::make_IntegerUnaryMinus_t(al, loc, op,
+                ASRUtils::expr_type(op), nullptr);
+        } else if( ASRUtils::is_real(*ASRUtils::expr_type(op)) ) {
+            tmp = ASR::make_RealUnaryMinus_t(al, loc, op,
+                ASRUtils::expr_type(op), nullptr);
+        }  else {
+            throw std::runtime_error("Only integer and real types are supported so "
+                "far for unary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(op)));
+        }
+    }
+
     bool TraverseBinaryOperator(clang::BinaryOperator *x) {
         clang::BinaryOperatorKind op = x->getOpcode();
         TraverseStmt(x->getLHS());
@@ -1311,7 +1346,7 @@ public:
             name == "exit" || name == "printf" || name == "exp" ||
             name == "sum" || name == "amax" || name == "abs" ||
             name == "operator-" || name == "operator/" || name == "operator>" ||
-            name == "range" ) {
+            name == "range" || name == "pow" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
@@ -1431,11 +1466,11 @@ public:
 
     bool TraverseUnaryOperator(clang::UnaryOperator* x) {
         clang::UnaryOperatorKind op = x->getOpcode();
+        clang::Expr* expr = x->getSubExpr();
+        TraverseStmt(expr);
+        ASR::expr_t* var = ASRUtils::EXPR(tmp.get());
         switch( op ) {
             case clang::UnaryOperatorKind::UO_PostInc: {
-                clang::Expr* expr = x->getSubExpr();
-                TraverseStmt(expr);
-                ASR::expr_t* var = ASRUtils::EXPR(tmp.get());
                 ASR::expr_t* incbyone = ASRUtils::EXPR(ASR::make_IntegerBinOp_t(
                     al, Lloc(x), var, ASR::binopType::Add,
                     ASRUtils::EXPR(ASR::make_IntegerConstant_t(
@@ -1445,8 +1480,12 @@ public:
                 is_stmt_created = true;
                 break;
             }
+            case clang::UnaryOperatorKind::UO_Minus: {
+                CreateUnaryMinus(var, Lloc(x));
+                break;
+            }
             default: {
-                throw std::runtime_error("Only postfix increment is supported so far");
+                throw std::runtime_error("Only postfix increment and minus are supported so far.");
             }
         }
         return true;
