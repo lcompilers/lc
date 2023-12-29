@@ -47,6 +47,7 @@ enum SpecialFunc {
     Range,
     Size,
     Pow,
+    Reshape,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -66,6 +67,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"range", SpecialFunc::Range},
     {"size", SpecialFunc::Size},
     {"pow", SpecialFunc::Pow},
+    {"reshape", SpecialFunc::Reshape},
 };
 
 class OneTimeUseString {
@@ -772,6 +774,54 @@ public:
             tmp = ASR::make_ArraySize_t(al, Lloc(x), callee, dim,
                 ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)),
                 nullptr);
+        } else if (sf == SpecialFunc::Reshape) {
+            size_t args_size = 0;
+            for( size_t r = 0; r < args.size(); r++ ) {
+                if( args.p[r] != nullptr ) {
+                    args_size += 1;
+                }
+            }
+            if( args_size != 1 ) {
+                throw std::runtime_error("Calling xt::xtensor::reshape should be called only with target shape.");
+            }
+
+            ASR::expr_t* target_shape = args.p[0];
+            size_t target_shape_rank = ASRUtils::extract_n_dims_from_ttype(ASRUtils::expr_type(target_shape));
+            if( target_shape_rank != 1 ) {
+                throw std::runtime_error("Target shape must be an array of one dimension only.");
+            }
+            size_t target_rank = ASRUtils::get_fixed_size_of_array(ASRUtils::expr_type(target_shape));
+            size_t callee_rank = ASRUtils::extract_n_dims_from_ttype(ASRUtils::expr_type(callee));
+            if( target_rank <= 0 ) {
+                throw std::runtime_error("Target shape must be a constant sized array of one dimension.");
+            }
+            if( target_rank != callee_rank ) {
+                throw std::runtime_error("Ranks must be same before and after reshaping.");
+            }
+            Vec<ASR::dimension_t> empty_dims;
+            empty_dims.reserve(al, target_rank);
+            for( size_t r = 0; r < target_rank; r++ ) {
+                ASR::dimension_t dim;
+                dim.loc = Lloc(x);
+                dim.m_length = nullptr;
+                dim.m_start = nullptr;
+                empty_dims.push_back(al, dim);
+            }
+
+            ASR::array_physical_typeType target_physical_type = ASR::array_physical_typeType::DescriptorArray;
+            bool override_physical_type = false;
+            if( ASRUtils::extract_physical_type(ASRUtils::expr_type(callee)) ==
+                ASR::array_physical_typeType::FixedSizeArray ) {
+                target_physical_type = ASR::array_physical_typeType::FixedSizeArray;
+                override_physical_type = true;
+            }
+            ASR::ttype_t* target_type = ASRUtils::make_Array_t_util(al, Lloc(x),
+                ASRUtils::extract_type(ASRUtils::expr_type(callee)), empty_dims.p, empty_dims.size(),
+                ASR::abiType::Source, false, target_physical_type, override_physical_type, false);
+            ASR::expr_t* new_shape = ASRUtils::cast_to_descriptor(al, args.p[0]);
+            tmp = ASR::make_ArrayReshape_t(al, Lloc(x), callee, new_shape, target_type, nullptr);
+            tmp = ASR::make_Assignment_t(al, Lloc(x), callee, ASRUtils::EXPR(tmp.get()), nullptr);
+            is_stmt_created = true;
         } else if (sf == SpecialFunc::Size) {
             if( args.size() != 0 ) {
                 throw std::runtime_error("xt::xtensor::size should be called with only one argument.");

@@ -2409,11 +2409,11 @@ public:
         this->visit_expr(*x.m_shape);
         llvm::Value* shape = tmp;
         ASR::ttype_t* x_m_array_type = ASRUtils::expr_type(x.m_array);
-                ASR::array_physical_typeType array_physical_type = ASRUtils::extract_physical_type(x_m_array_type);
+        ASR::array_physical_typeType array_physical_type = ASRUtils::extract_physical_type(x_m_array_type);
         switch( array_physical_type ) {
             case ASR::array_physical_typeType::DescriptorArray: {
                 ASR::ttype_t* asr_data_type = ASRUtils::duplicate_type_without_dims(al,
-                    x_m_array_type, x_m_array_type->base.loc);
+                    ASRUtils::get_contained_type(x_m_array_type), x_m_array_type->base.loc);
                 ASR::ttype_t* asr_shape_type = ASRUtils::get_contained_type(ASRUtils::expr_type(x.m_shape));
                 llvm::Type* llvm_data_type = llvm_utils->get_type_from_ttype_t_util(asr_data_type, module.get());
                 tmp = arr_descr->reshape(array, llvm_data_type, shape, asr_shape_type, module.get());
@@ -4859,8 +4859,13 @@ public:
                                                     llvm_data_type, llvm_size);
                 }
             } else {
+                bool create_dim_des_array = false;
+                if( LLVM::is_llvm_pointer(*target_type) ) {
+                    target = LLVM::CreateLoad(*builder, target);
+                    create_dim_des_array = true;
+                }
                 arr_descr->copy_array(value, target, module.get(),
-                                      target_type, false, false);
+                    target_type, create_dim_des_array, false);
             }
         } else if( ASR::is_a<ASR::DictItem_t>(*x.m_target) ) {
             ASR::DictItem_t* dict_item_t = ASR::down_cast<ASR::DictItem_t>(x.m_target);
