@@ -40,6 +40,7 @@ enum SpecialFunc {
     All,
     Any,
     NotEqual,
+    Equal,
     Exp,
     Abs,
     AMax,
@@ -60,6 +61,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"all", SpecialFunc::All},
     {"any", SpecialFunc::Any},
     {"not_equal", SpecialFunc::NotEqual},
+    {"equal", SpecialFunc::Equal},
     {"exp", SpecialFunc::Exp},
     {"abs", SpecialFunc::Abs},
     {"amax", SpecialFunc::AMax},
@@ -902,6 +904,10 @@ public:
             ASR::expr_t* arg1 = args.p[0];
             ASR::expr_t* arg2 = args.p[1];
             CreateCompareOp(arg1, arg2, ASR::cmpopType::NotEq, Lloc(x));
+        } else if( sf == SpecialFunc::Equal ) {
+            ASR::expr_t* arg1 = args.p[0];
+            ASR::expr_t* arg2 = args.p[1];
+            CreateCompareOp(arg1, arg2, ASR::cmpopType::Eq, Lloc(x));
         } else if (sf == SpecialFunc::Exit) {
             LCOMPILERS_ASSERT(args.size() == 1);
             int code = 0;
@@ -1418,7 +1424,7 @@ public:
             name == "exit" || name == "printf" || name == "exp" ||
             name == "sum" || name == "amax" || name == "abs" ||
             name == "operator-" || name == "operator/" || name == "operator>" ||
-            name == "range" || name == "pow" ) {
+            name == "range" || name == "pow" || name == "equal" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
