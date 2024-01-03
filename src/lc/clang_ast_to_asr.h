@@ -40,6 +40,7 @@ enum SpecialFunc {
     All,
     Any,
     NotEqual,
+    Equal,
     Exp,
     Abs,
     AMax,
@@ -60,6 +61,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"all", SpecialFunc::All},
     {"any", SpecialFunc::Any},
     {"not_equal", SpecialFunc::NotEqual},
+    {"equal", SpecialFunc::Equal},
     {"exp", SpecialFunc::Exp},
     {"abs", SpecialFunc::Abs},
     {"amax", SpecialFunc::AMax},
@@ -306,6 +308,8 @@ public:
             // do nothing
         } else if( clang_type->isCharType() ) {
             type = ASRUtils::TYPE(ASR::make_Character_t(al, l, 1, -1, nullptr));
+        } else if( clang_type->isBooleanType() ) {
+            type = ASRUtils::TYPE(ASR::make_Logical_t(al, l, 4));
         } else if( clang_type->isIntegerType() ) {
             type = ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
         } else if( clang_type->isFloatingType() ) {
@@ -627,6 +631,12 @@ public:
             generate_code_for_binop(ASR::binopType::Mul);
         } else if( cxx_operator_name == "operator>" ) {
             generate_code_for_cmpop(ASR::cmpopType::Gt);
+        } else if( cxx_operator_name == "operator<" ) {
+            generate_code_for_cmpop(ASR::cmpopType::Lt);
+        } else if( cxx_operator_name == "operator<=" ) {
+            generate_code_for_cmpop(ASR::cmpopType::LtE);
+        } else if( cxx_operator_name == "operator>=" ) {
+            generate_code_for_cmpop(ASR::cmpopType::GtE);
         } else {
             throw std::runtime_error("C++ operator is not supported yet, " + cxx_operator_name);
         }
@@ -900,6 +910,10 @@ public:
             ASR::expr_t* arg1 = args.p[0];
             ASR::expr_t* arg2 = args.p[1];
             CreateCompareOp(arg1, arg2, ASR::cmpopType::NotEq, Lloc(x));
+        } else if( sf == SpecialFunc::Equal ) {
+            ASR::expr_t* arg1 = args.p[0];
+            ASR::expr_t* arg2 = args.p[1];
+            CreateCompareOp(arg1, arg2, ASR::cmpopType::Eq, Lloc(x));
         } else if (sf == SpecialFunc::Exit) {
             LCOMPILERS_ASSERT(args.size() == 1);
             int code = 0;
@@ -1264,9 +1278,14 @@ public:
                    ASRUtils::is_real(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_RealCompare_t(al, loc, lhs,
                 cmpop_type, rhs, result_type, nullptr);
+        } else if( ASRUtils::is_logical(*ASRUtils::expr_type(lhs)) &&
+                   ASRUtils::is_logical(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_LogicalCompare_t(al, loc, lhs,
+                cmpop_type, rhs, result_type, nullptr);
         }  else {
             throw std::runtime_error("Only integer and real types are supported so "
-                "far for comparison operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs)));
+                "far for comparison operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs))
+                + " and " + ASRUtils::type_to_str(ASRUtils::expr_type(rhs)));
         }
     }
 
@@ -1349,6 +1368,21 @@ public:
                     is_cmpop = true;
                     break;
                 }
+                case clang::BO_LE: {
+                    cmpop_type = ASR::cmpopType::LtE;
+                    is_cmpop = true;
+                    break;
+                }
+                case clang::BO_GT: {
+                    cmpop_type = ASR::cmpopType::Gt;
+                    is_cmpop = true;
+                    break;
+                }
+                case clang::BO_GE: {
+                    cmpop_type = ASR::cmpopType::GtE;
+                    is_cmpop = true;
+                    break;
+                }
                 default: {
                     throw std::runtime_error("BinaryOperator not supported " + std::to_string(op));
                     break;
@@ -1396,7 +1430,8 @@ public:
             name == "exit" || name == "printf" || name == "exp" ||
             name == "sum" || name == "amax" || name == "abs" ||
             name == "operator-" || name == "operator/" || name == "operator>" ||
-            name == "range" || name == "pow" ) {
+            name == "range" || name == "pow" || name == "equal" ||
+            name == "operator<" || name == "operator<=" || name == "operator>=" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
