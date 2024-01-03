@@ -631,6 +631,12 @@ public:
             generate_code_for_binop(ASR::binopType::Mul);
         } else if( cxx_operator_name == "operator>" ) {
             generate_code_for_cmpop(ASR::cmpopType::Gt);
+        } else if( cxx_operator_name == "operator<" ) {
+            generate_code_for_cmpop(ASR::cmpopType::Lt);
+        } else if( cxx_operator_name == "operator<=" ) {
+            generate_code_for_cmpop(ASR::cmpopType::LtE);
+        } else if( cxx_operator_name == "operator>=" ) {
+            generate_code_for_cmpop(ASR::cmpopType::GtE);
         } else {
             throw std::runtime_error("C++ operator is not supported yet, " + cxx_operator_name);
         }
@@ -1424,7 +1430,8 @@ public:
             name == "exit" || name == "printf" || name == "exp" ||
             name == "sum" || name == "amax" || name == "abs" ||
             name == "operator-" || name == "operator/" || name == "operator>" ||
-            name == "range" || name == "pow" || name == "equal" ) {
+            name == "range" || name == "pow" || name == "equal" ||
+            name == "operator<" || name == "operator<=" || name == "operator>=" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
