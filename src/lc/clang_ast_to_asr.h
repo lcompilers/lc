@@ -306,6 +306,8 @@ public:
             // do nothing
         } else if( clang_type->isCharType() ) {
             type = ASRUtils::TYPE(ASR::make_Character_t(al, l, 1, -1, nullptr));
+        } else if( clang_type->isBooleanType() ) {
+            type = ASRUtils::TYPE(ASR::make_Logical_t(al, l, 4));
         } else if( clang_type->isIntegerType() ) {
             type = ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4));
         } else if( clang_type->isFloatingType() ) {
@@ -1264,9 +1266,14 @@ public:
                    ASRUtils::is_real(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_RealCompare_t(al, loc, lhs,
                 cmpop_type, rhs, result_type, nullptr);
+        } else if( ASRUtils::is_logical(*ASRUtils::expr_type(lhs)) &&
+                   ASRUtils::is_logical(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_LogicalCompare_t(al, loc, lhs,
+                cmpop_type, rhs, result_type, nullptr);
         }  else {
             throw std::runtime_error("Only integer and real types are supported so "
-                "far for comparison operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs)));
+                "far for comparison operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs))
+                + " and " + ASRUtils::type_to_str(ASRUtils::expr_type(rhs)));
         }
     }
 
@@ -1346,6 +1353,21 @@ public:
                 }
                 case clang::BO_LT: {
                     cmpop_type = ASR::cmpopType::Lt;
+                    is_cmpop = true;
+                    break;
+                }
+                case clang::BO_LE: {
+                    cmpop_type = ASR::cmpopType::LtE;
+                    is_cmpop = true;
+                    break;
+                }
+                case clang::BO_GT: {
+                    cmpop_type = ASR::cmpopType::Gt;
+                    is_cmpop = true;
+                    break;
+                }
+                case clang::BO_GE: {
+                    cmpop_type = ASR::cmpopType::GtE;
                     is_cmpop = true;
                     break;
                 }

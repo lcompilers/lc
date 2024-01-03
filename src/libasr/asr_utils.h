@@ -1834,7 +1834,8 @@ static inline bool is_logical(ASR::ttype_t &x) {
     return ASR::is_a<ASR::Logical_t>(
         *type_get_past_array(
             type_get_past_allocatable(
-                type_get_past_pointer(&x))));
+                type_get_past_pointer(
+                    type_get_past_const(&x)))));
 }
 
 // Checking if the ttype 't' is a type parameter
