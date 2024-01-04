@@ -118,8 +118,8 @@ namespace LCompilers::CastingUtil {
     ASR::expr_t* perform_casting(ASR::expr_t* expr, ASR::ttype_t* src,
                                  ASR::ttype_t* dest, Allocator& al,
                                  const Location& loc) {
-        ASR::ttypeType src_type = src->type;
-        ASR::ttypeType dest_type = dest->type;
+        ASR::ttypeType src_type = ASRUtils::extract_type(src)->type;
+        ASR::ttypeType dest_type = ASRUtils::extract_type(dest)->type;
         ASR::cast_kindType cast_kind;
         if( src_type == dest_type ) {
             if( kind_rules.find(src_type) == kind_rules.end() ) {
@@ -137,7 +137,11 @@ namespace LCompilers::CastingUtil {
             return expr;
         }
         // TODO: Fix loc
-        return ASRUtils::EXPR(ASRUtils::make_Cast_t_value(al, loc, expr,
-                                                          cast_kind, dest));
+        if( ASRUtils::is_array(src) ) {
+            ASR::dimension_t* m_dims = nullptr;
+            size_t n_dims = ASRUtils::extract_dimensions_from_ttype(src, m_dims);
+            dest = ASRUtils::make_Array_t_util(al, loc, ASRUtils::extract_type(dest), m_dims, n_dims);
+        }
+        return ASRUtils::EXPR(ASRUtils::make_Cast_t_value(al, loc, expr, cast_kind, dest));
     }
 }
