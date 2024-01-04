@@ -1781,7 +1781,8 @@ public:
             "mambaforge/envs",
             "lib/gcc",
             "lib/clang",
-            "micromamba-root/envs"
+            "micromamba-root/envs",
+            "micromamba/envs"
         };
         for( std::string& path: include_paths ) {
             if( file_path.find(path) != std::string::npos ) {
