@@ -49,6 +49,7 @@ enum SpecialFunc {
     Size,
     Pow,
     Reshape,
+    Iota,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -70,6 +71,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"size", SpecialFunc::Size},
     {"pow", SpecialFunc::Pow},
     {"reshape", SpecialFunc::Reshape},
+    {"operator\"\"i", SpecialFunc::Iota},
 };
 
 class OneTimeUseString {
@@ -423,6 +425,20 @@ public:
                     xshape_result->push_back(al, dim);
                 }
                 return nullptr;
+            } else if( template_name == "complex" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( template_arguments.size() > 1 ) {
+                    throw std::runtime_error("std::complex accepts only one argument.");
+                }
+
+                const clang::QualType& qual_type = template_arguments.at(0).getAsType();
+                ASR::ttype_t* complex_subtype = ClangTypeToASRType(qual_type, xshape_result);
+                if( !ASRUtils::is_real(*complex_subtype) ) {
+                    throw std::runtime_error(std::string("std::complex accepts only real types, found: ") +
+                        ASRUtils::type_to_str(complex_subtype));
+                }
+                type = ASRUtils::TYPE(ASR::make_Complex_t(al, l,
+                    ASRUtils::extract_kind_from_ttype_t(complex_subtype)));
             } else {
                 throw std::runtime_error(std::string("Unrecognized type ") + template_name);
             }
@@ -523,12 +539,16 @@ public:
             clang::Expr** args = x->getArgs();    \
             TraverseStmt(args[0]);    \
             ASR::expr_t* obj = ASRUtils::EXPR(tmp.get());    \
-            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {    \
-                TraverseStmt(args[1]);    \
-                ASR::expr_t* value = ASRUtils::EXPR(tmp.get());    \
+            TraverseStmt(args[1]);    \
+            ASR::expr_t* value = ASRUtils::EXPR(tmp.get());    \
+            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ||    \
+                ASRUtils::is_complex(*ASRUtils::expr_type(obj)) ||    \
+                ASRUtils::is_array(ASRUtils::expr_type(value)) ||    \
+                ASRUtils::is_complex(*ASRUtils::expr_type(value)) ) {    \
                 CreateBinOp(obj, value, op, Lloc(x));    \
             } else {    \
-                throw std::runtime_error(cxx_operator_name + " is supported only for arrays.");    \
+                throw std::runtime_error(cxx_operator_name + " is supported only for arrays and complex types, found "    \
+                    + ASRUtils::type_to_str(ASRUtils::expr_type(obj)));    \
             }    \
 
         #define generate_code_for_cmpop(op) if( x->getNumArgs() != 2 ) {    \
@@ -537,12 +557,16 @@ public:
             clang::Expr** args = x->getArgs();    \
             TraverseStmt(args[0]);    \
             ASR::expr_t* obj = ASRUtils::EXPR(tmp.get());    \
-            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ) {    \
-                TraverseStmt(args[1]);    \
-                ASR::expr_t* value = ASRUtils::EXPR(tmp.get());    \
+            TraverseStmt(args[1]);    \
+            ASR::expr_t* value = ASRUtils::EXPR(tmp.get());    \
+            if( ASRUtils::is_array(ASRUtils::expr_type(obj)) ||    \
+                ASRUtils::is_complex(*ASRUtils::expr_type(obj)) ||    \
+                ASRUtils::is_array(ASRUtils::expr_type(value)) ||    \
+                ASRUtils::is_complex(*ASRUtils::expr_type(value)) ) {    \
                 CreateCompareOp(obj, value, op, Lloc(x));    \
             } else {    \
-                throw std::runtime_error(cxx_operator_name + " is supported only for arrays.");    \
+                throw std::runtime_error(cxx_operator_name + " is supported only for arrays and complex types, found "    \
+                    + ASRUtils::type_to_str(ASRUtils::expr_type(obj)));    \
             }    \
 
         clang::Expr* callee = x->getCallee();
@@ -624,7 +648,14 @@ public:
         } else if( cxx_operator_name == "operator+" ) {
             generate_code_for_binop(ASR::binopType::Add);
         } else if( cxx_operator_name == "operator-" ) {
-            generate_code_for_binop(ASR::binopType::Sub);
+            if( x->getNumArgs() == 1 ) {
+                clang::Expr** args = x->getArgs();    \
+                TraverseStmt(args[0]);    \
+                ASR::expr_t* obj = ASRUtils::EXPR(tmp.get());    \
+                CreateUnaryMinus(obj, Lloc(x));
+            } else {
+                generate_code_for_binop(ASR::binopType::Sub);
+            }
         } else if( cxx_operator_name == "operator/" ) {
             generate_code_for_binop(ASR::binopType::Div);
         } else if( cxx_operator_name == "operator*" ) {
@@ -637,6 +668,8 @@ public:
             generate_code_for_cmpop(ASR::cmpopType::LtE);
         } else if( cxx_operator_name == "operator>=" ) {
             generate_code_for_cmpop(ASR::cmpopType::GtE);
+        } else if( cxx_operator_name == "operator!=" ) {
+            generate_code_for_cmpop(ASR::cmpopType::NotEq);
         } else {
             throw std::runtime_error("C++ operator is not supported yet, " + cxx_operator_name);
         }
@@ -964,6 +997,9 @@ public:
             } else {
                 throw std::runtime_error("Only {...} is allowed for supplying shape to xt::empty.");
             }
+        } else if (sf == SpecialFunc::Iota) {
+            tmp = ASR::make_ComplexConstant_t(al, Lloc(x), 0.0, 1.0,
+                ASRUtils::TYPE(ASR::make_Complex_t(al, Lloc(x), 8)));
         } else {
             throw std::runtime_error("Only printf and exit special functions supported");
         }
@@ -1262,6 +1298,7 @@ public:
 
     void CreateCompareOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
         ASR::cmpopType cmpop_type, const Location& loc) {
+        cast_helper(lhs, rhs, false);
         ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
         ASR::dimension_t* m_dims;
         size_t n_dims = ASRUtils::extract_dimensions_from_ttype(
@@ -1282,8 +1319,12 @@ public:
                    ASRUtils::is_logical(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_LogicalCompare_t(al, loc, lhs,
                 cmpop_type, rhs, result_type, nullptr);
-        }  else {
-            throw std::runtime_error("Only integer and real types are supported so "
+        } else if( ASRUtils::is_complex(*ASRUtils::expr_type(lhs)) &&
+                   ASRUtils::is_complex(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_ComplexCompare_t(al, loc, lhs,
+                cmpop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+        } else {
+            throw std::runtime_error("Only integer, real and complex types are supported so "
                 "far for comparison operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs))
                 + " and " + ASRUtils::type_to_str(ASRUtils::expr_type(rhs)));
         }
@@ -1291,6 +1332,7 @@ public:
 
     void CreateBinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
         ASR::binopType binop_type, const Location& loc) {
+        cast_helper(lhs, rhs, false);
         ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
         if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
             ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
@@ -1300,9 +1342,14 @@ public:
                    ASRUtils::is_real(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_RealBinOp_t(al, loc, lhs,
                 binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
-        }  else {
-            throw std::runtime_error("Only integer and real types are supported so "
-                "far for binary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs)));
+        } else if( ASRUtils::is_complex(*ASRUtils::expr_type(lhs)) &&
+                   ASRUtils::is_complex(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_ComplexBinOp_t(al, loc, lhs,
+                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+        } else {
+            throw std::runtime_error("Only integer, real and complex types are supported so "
+                "far for binary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs))
+                + " and " + ASRUtils::type_to_str(ASRUtils::expr_type(rhs)));
         }
     }
 
@@ -1313,7 +1360,7 @@ public:
         } else if( ASRUtils::is_real(*ASRUtils::expr_type(op)) ) {
             tmp = ASR::make_RealUnaryMinus_t(al, loc, op,
                 ASRUtils::expr_type(op), nullptr);
-        }  else {
+        } else {
             throw std::runtime_error("Only integer and real types are supported so "
                 "far for unary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(op)));
         }
@@ -1326,6 +1373,7 @@ public:
         TraverseStmt(x->getRHS());
         ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp.get());
         if( op == clang::BO_Assign ) {
+            cast_helper(x_lhs, x_rhs, true);
             tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, x_rhs, nullptr);
             is_stmt_created = true;
         } else {
@@ -1431,7 +1479,8 @@ public:
             name == "sum" || name == "amax" || name == "abs" ||
             name == "operator-" || name == "operator/" || name == "operator>" ||
             name == "range" || name == "pow" || name == "equal" ||
-            name == "operator<" || name == "operator<=" || name == "operator>=" ) {
+            name == "operator<" || name == "operator<=" || name == "operator>=" ||
+            name == "operator!=" || name == "operator\"\"i" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
@@ -1455,6 +1504,87 @@ public:
         tmp = ASR::make_IntegerConstant_t(al, Lloc(x), i,
             ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)));
         is_stmt_created = false;
+        return true;
+    }
+
+    void cast_helper(ASR::expr_t*& left, ASR::expr_t*& right, bool is_assign) {
+        bool no_cast = ((ASR::is_a<ASR::Pointer_t>(*ASRUtils::expr_type(left)) &&
+                        ASR::is_a<ASR::Var_t>(*left)) ||
+                        (ASR::is_a<ASR::Pointer_t>(*ASRUtils::expr_type(right)) &&
+                        ASR::is_a<ASR::Var_t>(*right)));
+        ASR::ttype_t *right_type = ASRUtils::expr_type(right);
+        ASR::ttype_t *left_type = ASRUtils::expr_type(left);
+        left_type = ASRUtils::extract_type(left_type);
+        right_type = ASRUtils::extract_type(right_type);
+        if( no_cast ) {
+            int lkind = ASRUtils::extract_kind_from_ttype_t(left_type);
+            int rkind = ASRUtils::extract_kind_from_ttype_t(right_type);
+            if( left_type->type != right_type->type || lkind != rkind ) {
+                throw SemanticError("Casting for mismatching pointer types not supported yet.",
+                                    right_type->base.loc);
+            }
+        }
+
+        // Handle presence of logical types in binary operations
+        // by converting them into 32-bit integers.
+        // See integration_tests/test_bool_binop.py for its significance.
+        if(!is_assign && ASRUtils::is_logical(*left_type) && ASRUtils::is_logical(*right_type) ) {
+            ASR::ttype_t* dest_type = ASRUtils::TYPE(ASR::make_Integer_t(al, left_type->base.loc, 4));
+            ASR::ttype_t* dest_type_left = dest_type;
+            if( ASRUtils::is_array(left_type) ) {
+                ASR::dimension_t* m_dims = nullptr;
+                size_t n_dims = ASRUtils::extract_dimensions_from_ttype(left_type, m_dims);
+                dest_type_left = ASRUtils::make_Array_t_util(al, dest_type->base.loc,
+                    dest_type, m_dims, n_dims);
+            }
+            ASR::ttype_t* dest_type_right = dest_type;
+            if( ASRUtils::is_array(right_type) ) {
+                ASR::dimension_t* m_dims = nullptr;
+                size_t n_dims = ASRUtils::extract_dimensions_from_ttype(right_type, m_dims);
+                dest_type_right = ASRUtils::make_Array_t_util(al, dest_type->base.loc,
+                    dest_type, m_dims, n_dims);
+            }
+            left = CastingUtil::perform_casting(left, left_type, dest_type_left, al, left->base.loc);
+            right = CastingUtil::perform_casting(right, right_type, dest_type_right, al, right->base.loc);
+            return ;
+        }
+
+        ASR::ttype_t *src_type = nullptr, *dest_type = nullptr;
+        ASR::expr_t *src_expr = nullptr, *dest_expr = nullptr;
+        int casted_expression_signal = CastingUtil::get_src_dest(
+            left, right, src_expr, dest_expr, src_type, dest_type, is_assign);
+        if( casted_expression_signal == 2 ) {
+            return ;
+        }
+        src_expr = CastingUtil::perform_casting(
+            src_expr, src_type, dest_type, al,
+            src_expr->base.loc);
+        if( casted_expression_signal == 0 ) {
+            left = src_expr;
+            right = dest_expr;
+        } else if( casted_expression_signal == 1 ) {
+            left = dest_expr;
+            right = src_expr;
+        }
+    }
+
+    bool TraverseUserDefinedLiteral(clang::UserDefinedLiteral* x) {
+        clang::Expr* clang_cooked_literal = x->getCookedLiteral();
+        TraverseStmt(clang_cooked_literal);
+        ASR::expr_t* cooked_literal = ASRUtils::EXPR(tmp.get());
+
+        clang::Expr* clang_literal = x->getCallee();
+        TraverseStmt(clang_literal);
+        if( tmp != nullptr ) {
+            throw std::runtime_error("User defined literals only work for operator\"\"i.");
+        }
+        if( !check_and_handle_special_function(x, nullptr) ) {
+            throw std::runtime_error("User defined literals only work for operator\"\"i.");
+        }
+        ASR::expr_t* literal = ASRUtils::EXPR(tmp.get());
+        cast_helper(literal, cooked_literal, false);
+        tmp = ASR::make_ComplexBinOp_t(al, Lloc(x), literal, ASR::binopType::Mul,
+            cooked_literal, ASRUtils::expr_type(literal), nullptr);
         return true;
     }
 
@@ -1651,7 +1781,8 @@ public:
             "mambaforge/envs",
             "lib/gcc",
             "lib/clang",
-            "micromamba-root/envs"
+            "micromamba-root/envs",
+            "micromamba/envs"
         };
         for( std::string& path: include_paths ) {
             if( file_path.find(path) != std::string::npos ) {
