@@ -1007,12 +1007,14 @@ public:
     }
 
     bool TraverseCallExpr(clang::CallExpr *x) {
+        std::string member_name = member_name_obj.get();
         TraverseStmt(x->getCallee());
         ASR::expr_t* callee = nullptr;
         if( tmp != nullptr ) {
             callee = ASRUtils::EXPR(tmp.get());
         }
         if( check_and_handle_special_function(x, callee) ) {
+            member_name_obj.set(member_name);
             return true;
         }
 
@@ -1043,6 +1045,7 @@ public:
                 callee_sym, call_args.p, call_args.size(), return_type,
                 nullptr, nullptr);
         }
+        member_name_obj.set(member_name);
         return true;
     }
 
