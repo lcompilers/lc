@@ -46,6 +46,7 @@ enum SpecialFunc {
     Sin,
     Cos,
     AMax,
+    AMin,
     Sum,
     Range,
     Size,
@@ -70,6 +71,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"sin", SpecialFunc::Sin},
     {"cos", SpecialFunc::Cos},
     {"amax", SpecialFunc::AMax},
+    {"amin", SpecialFunc::AMin},
     {"sum", SpecialFunc::Sum},
     {"range", SpecialFunc::Range},
     {"size", SpecialFunc::Size},
@@ -626,6 +628,8 @@ public:
                     array_indices.p, array_indices.size(),
                     ASRUtils::extract_type(ASRUtils::expr_type(obj)),
                     ASR::arraystorageType::RowMajor, nullptr);
+            } else if( ASR::is_a<ASR::IntrinsicArrayFunction_t>(*obj) ) {
+                tmp = (ASR::asr_t*) obj;
             } else {
                 throw std::runtime_error("Only indexing arrays is supported for now with operator().");
             }
@@ -943,7 +947,15 @@ public:
                 static_cast<int64_t>(ASRUtils::IntrinsicArrayFunctions::MaxVal),
                 args.p, 1, 0, ASRUtils::extract_type(ASRUtils::expr_type(args.p[0])),
                 nullptr);
-        }  else if( sf == SpecialFunc::Sum ) {
+        } else if( sf == SpecialFunc::AMin ) {
+            if( args.size() > 1 && args.p[1] != nullptr ) {
+                throw std::runtime_error("dim argument not yet supported with " + func_name);
+            }
+            tmp = ASRUtils::make_IntrinsicArrayFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicArrayFunctions::MinVal),
+                args.p, 1, 0, ASRUtils::extract_type(ASRUtils::expr_type(args.p[0])),
+                nullptr);
+        } else if( sf == SpecialFunc::Sum ) {
             if( args.size() > 1 && args.p[1] != nullptr ) {
                 throw std::runtime_error("dim argument not yet supported with " + func_name);
             }
@@ -1531,7 +1543,7 @@ public:
             name == "range" || name == "pow" || name == "equal" ||
             name == "operator<" || name == "operator<=" || name == "operator>=" ||
             name == "operator!=" || name == "operator\"\"i" || name == "sin" ||
-            name == "cos" ) {
+            name == "cos" || name == "amin" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
