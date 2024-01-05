@@ -646,6 +646,8 @@ public:
                 TraverseStmt(args[1]);
                 if( !is_stmt_created ) {
                     ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
+                    cast_helper(obj, value, true);
+                    ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), obj, value);
                     tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
                     is_stmt_created = true;
                 }
@@ -1427,6 +1429,7 @@ public:
         ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp.get());
         if( op == clang::BO_Assign ) {
             cast_helper(x_lhs, x_rhs, true);
+            ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), x_lhs, x_rhs);
             tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, x_rhs, nullptr);
             is_stmt_created = true;
         } else {
@@ -1615,7 +1618,8 @@ public:
         ASR::ttype_t *src_type = nullptr, *dest_type = nullptr;
         ASR::expr_t *src_expr = nullptr, *dest_expr = nullptr;
         int casted_expression_signal = CastingUtil::get_src_dest(
-            left, right, src_expr, dest_expr, src_type, dest_type, is_assign);
+            left, right, src_expr, dest_expr, src_type, dest_type,
+            is_assign, true);
         if( casted_expression_signal == 2 ) {
             return ;
         }
