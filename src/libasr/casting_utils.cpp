@@ -55,7 +55,7 @@ namespace LCompilers::CastingUtil {
     int get_src_dest(ASR::expr_t* left_expr, ASR::expr_t* right_expr,
                       ASR::expr_t*& src_expr, ASR::expr_t*& dest_expr,
                       ASR::ttype_t*& src_type, ASR::ttype_t*& dest_type,
-                      bool is_assign) {
+                      bool is_assign, bool allow_int_to_float=false) {
         ASR::ttype_t* left_type = ASRUtils::expr_type(left_expr);
         ASR::ttype_t* right_type = ASRUtils::expr_type(right_expr);
         if( ASR::is_a<ASR::Const_t>(*left_type) ) {
@@ -71,7 +71,8 @@ namespace LCompilers::CastingUtil {
             return 2;
         }
         if( is_assign ) {
-            if( ASRUtils::is_real(*left_type) && ASRUtils::is_integer(*right_type)) {
+            if( ASRUtils::is_real(*left_type) && ASRUtils::is_integer(*right_type) &&
+                !allow_int_to_float) {
                 throw SemanticError("Assigning integer to float is not supported",
                                     right_expr->base.loc);
             }
@@ -141,6 +142,8 @@ namespace LCompilers::CastingUtil {
             ASR::dimension_t* m_dims = nullptr;
             size_t n_dims = ASRUtils::extract_dimensions_from_ttype(src, m_dims);
             dest = ASRUtils::make_Array_t_util(al, loc, ASRUtils::extract_type(dest), m_dims, n_dims);
+        } else {
+            dest = ASRUtils::extract_type(dest);
         }
         return ASRUtils::EXPR(ASRUtils::make_Cast_t_value(al, loc, expr, cast_kind, dest));
     }
