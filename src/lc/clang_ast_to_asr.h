@@ -1345,6 +1345,21 @@ public:
         }
     }
 
+    void CreateLogicalOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
+        ASR::logicalbinopType binop_type, const Location& loc) {
+        cast_helper(lhs, rhs, false);
+        ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
+        if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
+            ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
+            tmp = ASR::make_LogicalBinOp_t(al, loc, lhs,
+                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+        } else {
+            throw std::runtime_error("Only integer types are supported so "
+                "far for logical binary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs))
+                + " and " + ASRUtils::type_to_str(ASRUtils::expr_type(rhs)));
+        }
+    }
+
     void CreateBinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
         ASR::binopType binop_type, const Location& loc) {
         cast_helper(lhs, rhs, false);
@@ -1365,6 +1380,17 @@ public:
             throw std::runtime_error("Only integer, real and complex types are supported so "
                 "far for binary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs))
                 + " and " + ASRUtils::type_to_str(ASRUtils::expr_type(rhs)));
+        }
+    }
+
+    void CreateLogicalNot(ASR::expr_t* op, const Location& loc) {
+        if( ASRUtils::is_logical(*ASRUtils::expr_type(op)) ) {
+            tmp = ASR::make_LogicalNot_t(al, loc, op,
+                ASRUtils::expr_type(op), nullptr);
+        } else {
+            throw std::runtime_error("Only logical types are supported so "
+                "far for logical not operator, found: " +
+                ASRUtils::type_to_str(ASRUtils::expr_type(op)));
         }
     }
 
@@ -1393,8 +1419,10 @@ public:
             is_stmt_created = true;
         } else {
             bool is_binop = false, is_cmpop = false;
+            bool is_logicalbinop = false;
             ASR::binopType binop_type;
             ASR::cmpopType cmpop_type;
+            ASR::logicalbinopType logicalbinop_type;
             switch (op) {
                 case clang::BO_Add: {
                     binop_type = ASR::binopType::Add;
@@ -1446,6 +1474,11 @@ public:
                     is_cmpop = true;
                     break;
                 }
+                case clang::BO_LAnd: {
+                    logicalbinop_type = ASR::logicalbinopType::And;
+                    is_logicalbinop = true;
+                    break;
+                }
                 default: {
                     throw std::runtime_error("BinaryOperator not supported " + std::to_string(op));
                     break;
@@ -1455,6 +1488,8 @@ public:
                 CreateBinOp(x_lhs, x_rhs, binop_type, Lloc(x));
             } else if( is_cmpop ) {
                 CreateCompareOp(x_lhs, x_rhs, cmpop_type, Lloc(x));
+            } else if( is_logicalbinop ) {
+                CreateLogicalOp(x_lhs, x_rhs, logicalbinop_type, Lloc(x));
             } else {
                 throw std::runtime_error("Only binary operators supported so far");
             }
@@ -1604,6 +1639,14 @@ public:
         return true;
     }
 
+    bool TraverseCXXBoolLiteralExpr(clang::CXXBoolLiteralExpr* x) {
+        bool b = x->getValue();
+        tmp = ASR::make_LogicalConstant_t(al, Lloc(x), b,
+            ASRUtils::TYPE(ASR::make_Logical_t(al, Lloc(x), 4)));
+        is_stmt_created = false;
+        return true;
+    }
+
     bool TraverseFloatingLiteral(clang::FloatingLiteral* x) {
         double d = x->getValue().convertToDouble();
         tmp = ASR::make_RealConstant_t(al, Lloc(x), d,
@@ -1713,6 +1756,10 @@ public:
             }
             case clang::UnaryOperatorKind::UO_Minus: {
                 CreateUnaryMinus(var, Lloc(x));
+                break;
+            }
+            case clang::UnaryOperatorKind::UO_LNot: {
+                CreateLogicalNot(var, Lloc(x));
                 break;
             }
             default: {
