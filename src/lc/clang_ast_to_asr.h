@@ -43,6 +43,8 @@ enum SpecialFunc {
     Equal,
     Exp,
     Abs,
+    Sin,
+    Cos,
     AMax,
     Sum,
     Range,
@@ -65,6 +67,8 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"equal", SpecialFunc::Equal},
     {"exp", SpecialFunc::Exp},
     {"abs", SpecialFunc::Abs},
+    {"sin", SpecialFunc::Sin},
+    {"cos", SpecialFunc::Cos},
     {"amax", SpecialFunc::AMax},
     {"sum", SpecialFunc::Sum},
     {"range", SpecialFunc::Range},
@@ -923,6 +927,14 @@ public:
             tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
                 static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Abs),
                 args.p, args.size(), 0, ASRUtils::expr_type(args.p[0]), nullptr);
+        } else if( sf == SpecialFunc::Sin ) {
+            tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Sin),
+                args.p, args.size(), 0, ASRUtils::expr_type(args.p[0]), nullptr);
+        } else if( sf == SpecialFunc::Cos ) {
+            tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Cos),
+                args.p, args.size(), 0, ASRUtils::expr_type(args.p[0]), nullptr);
         } else if( sf == SpecialFunc::AMax ) {
             if( args.size() > 1 && args.p[1] != nullptr ) {
                 throw std::runtime_error("dim argument not yet supported with " + func_name);
@@ -1483,7 +1495,8 @@ public:
             name == "operator-" || name == "operator/" || name == "operator>" ||
             name == "range" || name == "pow" || name == "equal" ||
             name == "operator<" || name == "operator<=" || name == "operator>=" ||
-            name == "operator!=" || name == "operator\"\"i" ) {
+            name == "operator!=" || name == "operator\"\"i" || name == "sin" ||
+            name == "cos" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
