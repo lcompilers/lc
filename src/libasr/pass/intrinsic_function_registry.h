@@ -904,7 +904,7 @@ static inline ASR::expr_t* instantiate_functions(Allocator &al,
         return b.Call(s, new_args, expr_type(f->m_return_var));
     }
     fill_func_arg("x", arg_type);
-    auto result = declare(new_name, return_type, ReturnVar);
+    auto result = declare(new_name, ASRUtils::extract_type(return_type), ReturnVar);
 
     {
         SymbolTable *fn_symtab_1 = al.make_new<SymbolTable>(fn_symtab);
