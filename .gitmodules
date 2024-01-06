@@ -1,3 +1,0 @@
-[submodule "libasr"]
-	path = libasr
-	url = https://github.com/lcompilers/libasr.git
