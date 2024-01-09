@@ -1861,7 +1861,8 @@ public:
             "lib/gcc",
             "lib/clang",
             "micromamba-root/envs",
-            "micromamba/envs"
+            "micromamba/envs",
+            "conda_root/envs"
         };
         for( std::string& path: include_paths ) {
             if( file_path.find(path) != std::string::npos ) {
