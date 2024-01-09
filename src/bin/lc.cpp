@@ -34,8 +34,6 @@ using namespace llvm;
 static cl::OptionCategory ClangCheckCategory("clang-check options");
 static const opt::OptTable &Options = getDriverOptTable();
 
-static cl::opt<bool> ASTDump("ast-dump",
-    cl::desc(Options.getOptionHelpText(options::OPT_ast_dump)), cl::cat(ClangCheckCategory));
 static cl::opt<std::string> ASTDumpFile("ast-dump-file",
     cl::desc("dump the AST output in the specified file"), cl::cat(ClangCheckCategory));
 static cl::opt<bool> ASTList("ast-list",
@@ -47,7 +45,9 @@ static cl::opt<std::string> ASTDumpFilter("ast-dump-filter",
 
 // LC options
 static cl::opt<bool>
-    ASRDump("asr-dump", cl::desc("dump the ASR"), cl::cat(ClangCheckCategory));
+    ShowAST("show-ast", cl::desc("dump the AST"), cl::cat(ClangCheckCategory));
+static cl::opt<bool>
+    ShowASR("show-asr", cl::desc("dump the ASR"), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
     NoIndent("no-indent", cl::desc("do not indent output"), cl::cat(ClangCheckCategory));
 static cl::opt<bool>
@@ -132,7 +132,7 @@ public:
     std::unique_ptr<clang::ASTConsumer> newASTConsumer() {
         if (ASTList) {
             return clang::CreateASTDeclNodeLister();
-        } else if ( ASTDump ) {
+        } else if ( ShowAST ) {
             llvm::raw_fd_ostream* llvm_fd_ostream = nullptr;
             if( ASTDumpFile.size() > 0 ) {
                 std::error_code errorCode;
@@ -732,7 +732,7 @@ int main(int argc, const char **argv) {
     std::string infile = sourcePaths[0];
 
     // Handle Clang related options in the following
-    if (ASTDump || ASTList || ASTPrint) {
+    if (ShowAST || ASTList || ASTPrint) {
         ClangCheckActionFactory CheckFactory(infile);
         int status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
         return status;
@@ -748,7 +748,7 @@ int main(int argc, const char **argv) {
         return status;
     }
 
-    if (ASRDump) {
+    if (ShowASR) {
         bool indent = !NoIndent, color = !NoColor;
         std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
         return 0;

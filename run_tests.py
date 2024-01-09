@@ -48,7 +48,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         run_test(
             filename,
             "ast",
-            "lc --ast-dump {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
+            "lc --show-ast {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
             filename,
             update_reference, extra_args)
 
@@ -56,7 +56,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         run_test(
             filename,
             "asr",
-            "lc --asr-dump --no-color {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
+            "lc --show-asr --no-color {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
             filename,
             update_reference, extra_args)
 
