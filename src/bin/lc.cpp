@@ -4,6 +4,7 @@
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Frontend/FrontendActions.h>
 #include <clang/Tooling/CommonOptionsParser.h>
+#include <clang/Tooling/CompilationDatabasePluginRegistry.h>
 #include <clang/Tooling/Tooling.h>
 
 #include <libasr/alloc.h>
@@ -82,6 +83,24 @@ static cl::opt<bool>
 static cl::opt<bool>
     GetRtlDir("get-rtl-dir",
     cl::desc("Print the path to the runtime library file"), cl::cat(ClangCheckCategory));
+
+
+// Constructs an empty compilation database
+// and thus helps avoid compilation database not found errors.
+class LCCompilationDatabase : public CompilationDatabasePlugin {
+public:
+  ~LCCompilationDatabase() {}
+
+  std::unique_ptr<CompilationDatabase>
+  loadFromDirectory(StringRef Directory, std::string &ErrorMessage) {
+    return std::make_unique<FixedCompilationDatabase>(".", std::vector<std::string>());
+  }
+};
+
+static CompilationDatabasePluginRegistry::Add<LCCompilationDatabase>
+    LCCompilationDatabasePlugin("lc-compilation-database",
+    "Constructs an empty compilation database.");
+
 
 enum class Backend {
     llvm, wasm, c, cpp, x86, fortran
