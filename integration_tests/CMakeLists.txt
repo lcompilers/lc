@@ -87,7 +87,7 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
                 OR (LC_BACKEND STREQUAL "c") OR (LC_BACKEND STREQUAL "fortran"))
             add_custom_command(
                 OUTPUT ${name}.o
-                COMMAND ${LC} -c ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}.o ${extra_args} --
+                COMMAND ${LC} -c ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}.o ${extra_args}
                 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${file_name}
                 VERBATIM)
             add_executable(${name} ${name}.o ${extra_files})
@@ -96,7 +96,7 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
             add_test(${name} ${CURRENT_BINARY_DIR}/${name})
         elseif (LC_BACKEND STREQUAL "wasm")
             # wasm test
-            execute_process(COMMAND ${LC} ${extra_args} --backend=wasm ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name} --)
+            execute_process(COMMAND ${LC} ${extra_args} --backend=wasm ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name})
             find_program(WASM_EXEC_RUNTIME node)
             execute_process(COMMAND "${WASM_EXEC_RUNTIME}" --version
                             OUTPUT_VARIABLE WASM_EXEC_VERSION
