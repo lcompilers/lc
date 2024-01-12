@@ -179,6 +179,9 @@ RUN(NAME expr1.c LABELS gcc c wasm llvm NOFAST)
 RUN(NAME expr2.c LABELS gcc c wasm llvm NOFAST)
 RUN(NAME expr3.c FAIL LABELS gcc c wasm llvm NOFAST)
 
+RUN(NAME switch_case_01.cpp LABELS gcc llvm NOFAST
+    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
+
 # arrays
 RUN(NAME array_01.cpp LABELS gcc llvm NOFAST)
 RUN(NAME array_02.cpp LABELS gcc llvm NOFAST)
