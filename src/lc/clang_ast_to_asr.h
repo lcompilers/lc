@@ -101,6 +101,27 @@ class OneTimeUseString {
         }
 };
 
+class OneTimeUseBool {
+
+    private:
+
+        bool value;
+
+    public:
+
+        OneTimeUseBool(): value{false} {}
+
+        bool get() {
+            bool value_ = value;
+            value = false;
+            return value_;
+        }
+
+        void set(bool value_) {
+            value = value_;
+        }
+};
+
 template <typename T>
 class OneTimeUseASRNode {
 
@@ -149,13 +170,17 @@ public:
     Vec<ASR::expr_t*>* print_args;
     bool is_all_called, is_range_called;
     OneTimeUseASRNode<ASR::expr_t> range_start, range_end, range_step;
+    Vec<ASR::case_stmt_t*>* current_switch_case;
+    Vec<ASR::stmt_t*>* default_stmt;
+    OneTimeUseBool is_break_stmt_present;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
         Context(Context_), al{al_}, tu{tu_},
         current_body{nullptr}, is_stmt_created{true},
         assignment_target{nullptr}, print_args{nullptr},
-        is_all_called{false}, is_range_called{false} {}
+        is_all_called{false}, is_range_called{false},
+        current_switch_case{nullptr}, default_stmt{nullptr} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -1675,6 +1700,74 @@ public:
         std::string s = x->getString().str();
         tmp = ASR::make_StringConstant_t(al, Lloc(x), s2c(al, s),
             ASRUtils::TYPE(ASR::make_Character_t(al, Lloc(x), 1, s.size(), nullptr)));
+        is_stmt_created = false;
+        return true;
+    }
+
+    bool TraverseSwitchStmt(clang::SwitchStmt* x) {
+        Vec<ASR::case_stmt_t*>* current_switch_case_copy = current_switch_case;
+        Vec<ASR::stmt_t*>* default_stmt_copy = default_stmt;
+        Vec<ASR::case_stmt_t*> current_switch_case_; current_switch_case_.reserve(al, 1);
+        Vec<ASR::stmt_t*> default_stmt_; default_stmt_.reserve(al, 1);
+        current_switch_case = &current_switch_case_;
+        default_stmt = &default_stmt_;
+
+        clang::Expr* clang_cond = x->getCond();
+        TraverseStmt(clang_cond);
+        ASR::expr_t* cond = ASRUtils::EXPR(tmp.get());
+
+        TraverseStmt(x->getBody());
+
+        tmp = ASR::make_Select_t(al, Lloc(x), cond,
+            current_switch_case->p, current_switch_case->size(),
+            default_stmt->p, default_stmt->size());
+        current_switch_case = current_switch_case_copy;
+        default_stmt = default_stmt_copy;
+        is_stmt_created = true;
+        return true;
+    }
+
+    bool TraverseBreakStmt(clang::BreakStmt* x) {
+        clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseBreakStmt(x);
+        is_break_stmt_present.set(true);
+        return true;
+    }
+
+    bool TraverseCaseStmt(clang::CaseStmt* x) {
+        if ( x->caseStmtIsGNURange() ) {
+            throw std::runtime_error("Ranges not supported in case.");
+        }
+
+        clang::Expr* lhs = x->getLHS();
+        TraverseStmt(lhs);
+        ASR::expr_t* cond = ASRUtils::EXPR(tmp.get());
+
+        Vec<ASR::expr_t*> a_test; a_test.reserve(al, 1);
+        a_test.push_back(al, cond);
+
+        Vec<ASR::stmt_t*> body; body.reserve(al, 1);
+        Vec<ASR::stmt_t*>*current_body_copy = current_body;
+        current_body = &body;
+        is_break_stmt_present.set(false);
+        TraverseStmt(x->getSubStmt());
+        current_body = current_body_copy;
+        if( !is_break_stmt_present.get() ) {
+            throw std::runtime_error("Case must contain break statement. Fall through not yet supported.");
+        }
+        ASR::case_stmt_t* case_stmt = ASR::down_cast<ASR::case_stmt_t>(
+            ASR::make_CaseStmt_t(al, Lloc(x), a_test.p, a_test.size(),
+            body.p, body.size()));
+        current_switch_case->push_back(al, case_stmt);
+        is_stmt_created = false;
+        return true;
+    }
+
+    bool TraverseDefaultStmt(clang::DefaultStmt* x) {
+        Vec<ASR::stmt_t*> body; body.reserve(al, 1);
+        Vec<ASR::stmt_t*>*current_body_copy = current_body;
+        current_body = default_stmt;
+        TraverseStmt(x->getSubStmt());
+        current_body = current_body_copy;
         is_stmt_created = false;
         return true;
     }
