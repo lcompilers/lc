@@ -1,12 +1,12 @@
 {
-    "basename": "wat-expr2-cdc41d9",
-    "cmd": "lc --no-color --show-wat {infile} -extra-arg=\"\"",
+    "basename": "llvm-expr2-94e7c35",
+    "cmd": "lc --no-color --show-llvm {infile} -o {outfile}",
     "infile": "tests/expr2.c",
     "infile_hash": "11cb114715d67a4763454167abc900089b2119ecf18a980d18a30322",
     "outfile": null,
     "outfile_hash": null,
-    "stdout": "wat-expr2-cdc41d9.stdout",
-    "stdout_hash": "be3f822d1e4476443d475924d60b36a3cf2fdbe5d1e58bf564df16b6",
+    "stdout": "llvm-expr2-94e7c35.stdout",
+    "stdout_hash": "c4fee5fbea28a7bc420b69eef175e602dac950734fe20cdb001500ee",
     "stderr": null,
     "stderr_hash": null,
     "returncode": 0

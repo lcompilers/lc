@@ -1,12 +1,12 @@
 {
-    "basename": "cpp-test-245cbc2",
-    "cmd": "lc --no-color --show-cpp {infile} -extra-arg=\"\"",
+    "basename": "c-test-ec3a81c",
+    "cmd": "lc --no-color --show-c {infile}",
     "infile": "tests/test.cpp",
     "infile_hash": "9e5ef4c37b7e9e1f13f0082ce65459c1e596430887537eb8fd656b77",
     "outfile": null,
     "outfile_hash": null,
-    "stdout": "cpp-test-245cbc2.stdout",
-    "stdout_hash": "27108a8e13274f0b14756c71f802f468b65e40d511b3a72cc9e30df8",
+    "stdout": "c-test-ec3a81c.stdout",
+    "stdout_hash": "3ed031709ad9bea806c48af8882967d8d8b639458614dd93129ba6eb",
     "stderr": null,
     "stderr_hash": null,
     "returncode": 0

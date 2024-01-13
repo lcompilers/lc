@@ -1,0 +1,13 @@
+{
+    "basename": "c-expr2-6f28c3e",
+    "cmd": "lc --no-color --show-c {infile}",
+    "infile": "tests/expr2.c",
+    "infile_hash": "11cb114715d67a4763454167abc900089b2119ecf18a980d18a30322",
+    "outfile": null,
+    "outfile_hash": null,
+    "stdout": "c-expr2-6f28c3e.stdout",
+    "stdout_hash": "f5e0bbc80b7b062e04b4e1ca71389d0e84393c3e679032648e797ce9",
+    "stderr": null,
+    "stderr_hash": null,
+    "returncode": 0
+}

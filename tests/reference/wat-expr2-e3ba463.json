@@ -1,12 +1,12 @@
 {
-    "basename": "cpp-expr2-9f99a45",
-    "cmd": "lc --no-color --show-cpp {infile} -extra-arg=\"\"",
+    "basename": "wat-expr2-e3ba463",
+    "cmd": "lc --no-color --show-wat {infile}",
     "infile": "tests/expr2.c",
     "infile_hash": "11cb114715d67a4763454167abc900089b2119ecf18a980d18a30322",
     "outfile": null,
     "outfile_hash": null,
-    "stdout": "cpp-expr2-9f99a45.stdout",
-    "stdout_hash": "8d4619b93ad4f0abe2863dad83e5f5471f9d17d1866f31213d84f3a7",
+    "stdout": "wat-expr2-e3ba463.stdout",
+    "stdout_hash": "be3f822d1e4476443d475924d60b36a3cf2fdbe5d1e58bf564df16b6",
     "stderr": null,
     "stderr_hash": null,
     "returncode": 0
