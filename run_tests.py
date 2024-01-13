@@ -27,7 +27,6 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
     fortran = is_included("fortran")
     is_cumulative = is_included("cumulative")
     wat = is_included("wat")
-    clang_extra_arg = test.get("extra_arg", "")
     disable_main = is_included("disable_main")
     pass_ = test.get("pass", None)
     optimization_passes = ["flip_sign", "div_to_mul", "fma", "sign_from_value",
@@ -48,7 +47,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         run_test(
             filename,
             "ast",
-            "lc --show-ast {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
+            "lc --show-ast {infile} -o {outfile}",
             filename,
             update_reference, extra_args)
 
@@ -56,7 +55,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         run_test(
             filename,
             "asr",
-            "lc --show-asr --no-color {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
+            "lc --show-asr --no-color {infile} -o {outfile}",
             filename,
             update_reference, extra_args)
 
@@ -64,7 +63,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         run_test(
             filename,
             "asr_json",
-            "lc --show-asr --json --no-color {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
+            "lc --show-asr --json --no-color {infile} -o {outfile}",
             filename,
             update_reference, extra_args)
 
@@ -73,7 +72,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
         if is_cumulative:
             cmd += "--cumulative "
         cmd += "--pass=" + pass_ + \
-            " --show-asr --no-color {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"'
+            " --show-asr --no-color {infile} -o {outfile}"
         run_test(filename, "pass_{}".format(pass_), cmd,
                  filename, update_reference, extra_args)
 
@@ -84,7 +83,7 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
             run_test(
                 filename,
                 "llvm",
-                "lc --no-color --show-llvm {infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
+                "lc --no-color --show-llvm {infile} -o {outfile}",
                 filename,
                 update_reference, extra_args)
         if llvm_dbg:
@@ -92,26 +91,26 @@ def single_test(test, verbose, no_llvm, skip_run_with_dbg, skip_cpptranslate, up
                 filename,
                 "llvm_dbg",
                 "lc --no-color --show-llvm -g --debug-with-line-column "
-                    "{infile} -o {outfile}" + f' -extra-arg="{clang_extra_arg}"',
+                    "{infile} -o {outfile}",
                 filename,
                 update_reference, extra_args)
 
     if cpp:
-        run_test(filename, "cpp", "lc --no-color --show-cpp {infile}" + f' -extra-arg="{clang_extra_arg}"',
+        run_test(filename, "cpp", "lc --no-color --show-cpp {infile}",
                  filename, update_reference, extra_args)
 
     if c:
         if disable_main:
-            run_test(filename, "c", "lc --no-color --disable-main --show-c {infile}" + f' -extra-arg="{clang_extra_arg}"',
+            run_test(filename, "c", "lc --no-color --disable-main --show-c {infile}",
                  filename, update_reference, extra_args)
         else:
-            run_test(filename, "c", "lc --no-color --show-c {infile}" + f' -extra-arg="{clang_extra_arg}"',
+            run_test(filename, "c", "lc --no-color --show-c {infile}",
                  filename, update_reference, extra_args)
     if wat:
-        run_test(filename, "wat", "lc --no-color --show-wat {infile}" + f' -extra-arg="{clang_extra_arg}"',
+        run_test(filename, "wat", "lc --no-color --show-wat {infile}",
                  filename, update_reference, extra_args)
     if fortran:
-        run_test(filename, "fortran", "lc --no-color --show-fortran {infile}" + f' -extra-arg="{clang_extra_arg}"',
+        run_test(filename, "fortran", "lc --no-color --show-fortran {infile}",
                  filename, update_reference, extra_args)
 
 if __name__ == "__main__":
