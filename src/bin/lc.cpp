@@ -35,59 +35,6 @@ using namespace clang::driver;
 using namespace clang::tooling;
 using namespace llvm;
 
-static cl::OptionCategory ClangCheckCategory("clang-check options");
-static const opt::OptTable &Options = getDriverOptTable();
-
-static cl::opt<std::string> ASTDumpFile("ast-dump-file",
-    cl::desc("dump the AST output in the specified file"), cl::cat(ClangCheckCategory));
-static cl::opt<bool> ASTList("ast-list",
-    cl::desc(Options.getOptionHelpText(options::OPT_ast_list)), cl::cat(ClangCheckCategory));
-static cl::opt<bool> ASTPrint("ast-print",
-    cl::desc(Options.getOptionHelpText(options::OPT_ast_print)), cl::cat(ClangCheckCategory));
-static cl::opt<std::string> ASTDumpFilter("ast-dump-filter",
-    cl::desc(Options.getOptionHelpText(options::OPT_ast_dump_filter)), cl::cat(ClangCheckCategory));
-
-// LC options
-static cl::opt<bool>
-    ShowAST("show-ast", cl::desc("dump the AST"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    ShowASR("show-asr", cl::desc("dump the ASR"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    NoIndent("no-indent", cl::desc("do not indent output"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    NoColor("no-color", cl::desc("do not use color for ASR"), cl::cat(ClangCheckCategory));
-static cl::opt<std::string>
-    ArgO("o",
-    cl::desc(Options.getOptionHelpText(options::OPT_o)), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    ArgC("c",
-    cl::desc(Options.getOptionHelpText(options::OPT_c)), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    ShowWAT("show-wat",
-    cl::desc("Show WAT (WebAssembly Text Format) and exit"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    ShowC("show-c",
-    cl::desc("Show C translation source for the given file and exit"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    ShowCPP("show-cpp",
-    cl::desc("Show C++ translation source for the given file and exit"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    ShowFortran("show-fortran",
-    cl::desc("Show Fortran translation source for the given file and exit"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    ShowLLVM("show-llvm",
-    cl::desc("Show LLVM IR for the given file and exit"), cl::cat(ClangCheckCategory));
-static cl::opt<std::string>
-    ArgBackend("backend",
-    cl::desc("Select a backend (llvm, wasm, c, cpp, fortran)"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    GetRtlHeaderDir("get-rtl-header-dir",
-    cl::desc("Print the path to the runtime library header file"), cl::cat(ClangCheckCategory));
-static cl::opt<bool>
-    GetRtlDir("get-rtl-dir",
-    cl::desc("Print the path to the runtime library file"), cl::cat(ClangCheckCategory));
-
-
 // Constructs an empty compilation database
 // and thus helps avoid compilation database not found errors.
 class LCCompilationDatabase : public CompilationDatabasePlugin {
@@ -147,28 +94,33 @@ class ClangCheckActionFactory {
 
 public:
 
-    std::string infile;
+    std::string infile, ast_dump_file, ast_dump_filter;
+    bool ast_list, ast_print, show_ast;
 
-    ClangCheckActionFactory(std::string infile_): infile(infile_) {}
+    ClangCheckActionFactory(std::string infile_, std::string ast_dump_file,
+        std::string ast_dump_filter, bool ast_list,
+        bool ast_print, bool show_ast): infile(infile_),
+        ast_dump_file(ast_dump_file), ast_dump_filter(ast_dump_filter),
+        ast_list(ast_list), ast_print(ast_print), show_ast(show_ast) {}
 
     std::unique_ptr<clang::ASTConsumer> newASTConsumer() {
-        if (ASTList) {
+        if (ast_list) {
             return clang::CreateASTDeclNodeLister();
-        } else if ( ShowAST ) {
+        } else if ( show_ast ) {
             llvm::raw_fd_ostream* llvm_fd_ostream = nullptr;
-            if( ASTDumpFile.size() > 0 ) {
+            if ( ast_dump_file.size() > 0 ) {
                 std::error_code errorCode;
-                llvm_fd_ostream = new llvm::raw_fd_ostream(ASTDumpFile, errorCode);
+                llvm_fd_ostream = new llvm::raw_fd_ostream(ast_dump_file, errorCode);
             }
             std::unique_ptr<llvm::raw_ostream> llvm_ostream(llvm_fd_ostream);
-            return clang::CreateASTDumper(std::move(llvm_ostream), ASTDumpFilter,
+            return clang::CreateASTDumper(std::move(llvm_ostream), ast_dump_filter,
                                           /*DumpDecls=*/true,
                                           /*Deserialize=*/false,
                                           /*DumpLookups=*/false,
                                           /*DumpDeclTypes=*/false,
                                           clang::ADOF_Default);
-        } else if (ASTPrint) {
-            return clang::CreateASTPrinter(nullptr, ASTDumpFilter);
+        } else if (ast_print) {
+            return clang::CreateASTPrinter(nullptr, ast_dump_filter);
         }
         return std::make_unique<clang::ASTConsumer>();
     }
@@ -731,18 +683,74 @@ void do_print_rtl_dir() {
     std::cout << rtl_dir << std::endl;
 }
 
-int main(int argc, const char **argv) {
-    auto ExpectedParser = CommonOptionsParser::create(argc, argv, ClangCheckCategory);
-    if (!ExpectedParser) {
-        if (GetRtlHeaderDir) {
-            do_print_rtl_header_dir();
-            return 0;
-        }
+int mainApp(int argc, const char **argv) {
+    std::vector<std::string> arg_files;
+    std::string ast_dump_file = "";
+    bool ast_list = false;
+    bool ast_print = false;
+    std::string ast_dump_filter = "";
+    bool show_ast = false;
+    bool show_asr = false;
+    bool arg_no_indent = false;
+    bool arg_no_color = false;
+    bool show_llvm = false;
+    bool show_cpp = false;
+    bool show_c = false;
+    bool show_wat = false;
+    bool show_fortran = false;
+    bool arg_c = false;
+    std::string arg_backend = "";
+    bool print_rtl_header_dir = false;
+    bool print_rtl_dir = false;
 
-        if (GetRtlDir) {
-            do_print_rtl_dir();
-            return 0;
-        }
+    LCompilers::CompilerOptions co;
+    co.po.runtime_library_dir = LCompilers::LC::get_runtime_library_dir();
+
+    CLI::App app{"LFortran: modern interactive LLVM-based Fortran compiler"};
+    app.add_option("files", arg_files, "Source files");
+    app.add_flag("--ast-dump-file", ast_dump_file, "Dump the AST output in the specified file");
+    app.add_flag("--ast-list", ast_list, "Build ASTs and print the list of declaration node qualified names");
+    app.add_flag("--ast-print", ast_print, "Build ASTs and then pretty-print them");
+    app.add_flag("--ast-dump-filter", ast_dump_filter, "Use with -ast-dump or -ast-print to dump/print"
+     " only AST declaration nodes having a certain substring in a qualified name.");
+    app.add_flag("--show-ast", show_ast, "Show AST for the given file and exit");
+    app.add_flag("--show-asr", show_asr, "Show ASR for the given file and exit");
+    app.add_flag("--no-indent", arg_no_indent, "Turn off Indented print ASR/AST");
+    app.add_flag("--no-color", arg_no_color, "Turn off colored AST/ASR");
+    app.add_flag("-c", arg_c, "Compile and assemble, do not link");
+    app.add_option("-o", co.arg_o, "Specify the file to place the output into");
+    app.add_flag("--show-llvm", show_llvm, "Show LLVM IR for the given file and exit");
+    app.add_flag("--show-cpp", show_cpp, "Show C++ translation source for the given file and exit");
+    app.add_flag("--show-c", show_c, "Show C translation source for the given file and exit");
+    app.add_flag("--show-wat", show_wat, "Show WAT (WebAssembly Text Format) and exit");
+    app.add_flag("--show-fortran", show_fortran, "Show Fortran translation source for the given file and exit");
+    app.add_option("--backend", arg_backend, "Select a backend (llvm, c, cpp, x86, wasm, fortran)")->capture_default_str();
+    app.add_flag("--get-rtl-header-dir", print_rtl_header_dir, "Print the path to the runtime library header file");
+    app.add_flag("--get-rtl-dir", print_rtl_dir, "Print the path to the runtime library file");
+
+    app.get_formatter()->column_width(25);
+    app.require_subcommand(0, 1);
+    CLI11_PARSE(app, argc, argv);
+
+    co.use_colors = !arg_no_color;
+    co.indent = !arg_no_indent;
+
+    if (print_rtl_header_dir) {
+        do_print_rtl_header_dir();
+        return 0;
+    }
+
+    if (print_rtl_dir) {
+        do_print_rtl_dir();
+        return 0;
+    }
+
+    static cl::OptionCategory ClangCheckCategory("clang-check options");
+    static const opt::OptTable &Options = getDriverOptTable();
+    int clang_argc = 2;
+    const char *clang_argv[] = {"lc", arg_files[0].c_str()};
+    auto ExpectedParser = CommonOptionsParser::create(clang_argc, clang_argv, ClangCheckCategory);
+    if (!ExpectedParser) {
         llvm::errs() << ExpectedParser.takeError();
         return 1;
     }
@@ -754,8 +762,9 @@ int main(int argc, const char **argv) {
     std::string infile = sourcePaths[0];
 
     // Handle Clang related options in the following
-    if (ShowAST || ASTList || ASTPrint) {
-        ClangCheckActionFactory CheckFactory(infile);
+    if (show_ast || ast_list || ast_print) {
+        ClangCheckActionFactory CheckFactory(infile, ast_dump_file,
+            ast_dump_filter, ast_list, ast_print, show_ast);
         int status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
         return status;
     }
@@ -770,28 +779,27 @@ int main(int argc, const char **argv) {
         return status;
     }
 
-    if (ShowASR) {
-        bool indent = !NoIndent, color = !NoColor;
-        std::cout<< LCompilers::pickle(*tu, color, indent, true) << std::endl;
+    if (show_asr) {
+        std::cout<< LCompilers::pickle(*tu, co.use_colors, co.indent, true) << std::endl;
         return 0;
-    } else if (ShowWAT) {
+    } else if (show_wat) {
         return emit_wat(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
-    } else if (ShowC) {
+    } else if (show_c) {
         return emit_c(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
-    } else if (ShowCPP) {
+    } else if (show_cpp) {
         return emit_cpp(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
-    } else if (ShowFortran) {
+    } else if (show_fortran) {
         return emit_fortran(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
-    } else if (ShowLLVM) {
+    } else if (show_llvm) {
         return emit_llvm(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
     // compile to binary
-    std::string outfile = construct_outfile(infile, ArgO);
+    std::string outfile = construct_outfile(infile, co.arg_o);
 
     Backend backend;
-    if (string_to_backend.find(ArgBackend) != string_to_backend.end()) {
-        backend = string_to_backend[ArgBackend];
+    if (string_to_backend.find(arg_backend) != string_to_backend.end()) {
+        backend = string_to_backend[arg_backend];
     }
 
     std::string tmp_file;
@@ -807,7 +815,7 @@ int main(int argc, const char **argv) {
         tmp_file = outfile + "__generated__.f90";
         status = compile_to_fortran(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
     } else if (backend == Backend::llvm) {
-        tmp_file = ArgC ? outfile : (outfile + "__generated__.o");
+        tmp_file = arg_c ? outfile : (outfile + "__generated__.o");
         status = compile_to_binary_object(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
     }
 
@@ -815,10 +823,7 @@ int main(int argc, const char **argv) {
         return status;
     }
 
-    LCompilers::CompilerOptions co;
-    co.arg_o = ArgO;
-
-    if (ArgC) {
+    if (arg_c) {
         // generate object file from source code
         if (backend == Backend::c) {
             status = compile_c_to_object_file(tmp_file, outfile);
@@ -833,4 +838,27 @@ int main(int argc, const char **argv) {
     std::vector<std::string> infiles = {tmp_file};
     status = link_executable(infiles, outfile, LCompilers::LC::get_runtime_library_dir(), backend, false, false, true, co);
     return status;
+}
+
+int main(int argc, const char **argv) {
+    try {
+        return mainApp(argc, argv);
+    } catch(const LCompilers::LCompilersException &e) {
+        std::cerr << "Internal Compiler Error: Unhandled exception" << std::endl;
+        std::vector<LCompilers::StacktraceItem> d = e.stacktrace_addresses();
+        get_local_addresses(d);
+        get_local_info(d);
+        std::cerr << stacktrace2str(d, LCompilers::stacktrace_depth);
+        std::cerr << e.name() + ": " << e.msg() << std::endl;
+        return 1;
+    } catch(const std::runtime_error &e) {
+        std::cerr << "runtime_error: " << e.what() << std::endl;
+        return 1;
+    } catch(const std::exception &e) {
+        std::cerr << "std::exception: " << e.what() << std::endl;
+        return 1;
+    } catch(...) {
+        std::cerr << "Unknown Exception" << std::endl;
+        return 1;
+    }
 }
