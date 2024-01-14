@@ -1,12 +1,12 @@
 {
-    "basename": "c-expr2-16b2530",
-    "cmd": "lc --no-color --show-c {infile} -extra-arg=\"\"",
+    "basename": "fortran-expr2-98fb1e2",
+    "cmd": "lc --no-color --show-fortran {infile}",
     "infile": "tests/expr2.c",
     "infile_hash": "11cb114715d67a4763454167abc900089b2119ecf18a980d18a30322",
     "outfile": null,
     "outfile_hash": null,
-    "stdout": "c-expr2-16b2530.stdout",
-    "stdout_hash": "f5e0bbc80b7b062e04b4e1ca71389d0e84393c3e679032648e797ce9",
+    "stdout": "fortran-expr2-98fb1e2.stdout",
+    "stdout_hash": "b8f3c8cc35ee0c5361cfcfa8863d24bb92422816362a63be297b1122",
     "stderr": null,
     "stderr_hash": null,
     "returncode": 0

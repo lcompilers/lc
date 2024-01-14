@@ -179,49 +179,28 @@ RUN(NAME expr1.c LABELS gcc c wasm llvm NOFAST)
 RUN(NAME expr2.c LABELS gcc c wasm llvm NOFAST)
 RUN(NAME expr3.c FAIL LABELS gcc c wasm llvm NOFAST)
 
-RUN(NAME switch_case_01.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
+RUN(NAME switch_case_01.cpp LABELS gcc llvm NOFAST)
 
 # arrays
 RUN(NAME array_01.cpp LABELS gcc llvm NOFAST)
 RUN(NAME array_02.cpp LABELS gcc llvm NOFAST)
-RUN(NAME array_03.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_04.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_05.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_06.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_07.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_08.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_09.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_10.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_11.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_12.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_13.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_14.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_15.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_16.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_17.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_18.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_19.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_20.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_21.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
-RUN(NAME array_22.cpp LABELS gcc llvm NOFAST
-    EXTRA_ARGS --extra-arg=-I${CONDA_PREFIX}/include)
+RUN(NAME array_03.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_04.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_05.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_06.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_07.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_08.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_09.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_10.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_11.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_12.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_13.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_14.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_15.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_16.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_17.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_18.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_19.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_20.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_21.cpp LABELS gcc llvm NOFAST)
+RUN(NAME array_22.cpp LABELS gcc llvm NOFAST)
