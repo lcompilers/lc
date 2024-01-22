@@ -173,6 +173,7 @@ public:
     Vec<ASR::case_stmt_t*>* current_switch_case;
     Vec<ASR::stmt_t*>* default_stmt;
     OneTimeUseBool is_break_stmt_present;
+    bool enable_fall_through;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
@@ -180,7 +181,8 @@ public:
         current_body{nullptr}, is_stmt_created{true},
         assignment_target{nullptr}, print_args{nullptr},
         is_all_called{false}, is_range_called{false},
-        current_switch_case{nullptr}, default_stmt{nullptr} {}
+        current_switch_case{nullptr}, default_stmt{nullptr},
+        enable_fall_through{false} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -1711,6 +1713,7 @@ public:
         Vec<ASR::stmt_t*> default_stmt_; default_stmt_.reserve(al, 1);
         current_switch_case = &current_switch_case_;
         default_stmt = &default_stmt_;
+        bool enable_fall_through_copy = enable_fall_through;
 
         clang::Expr* clang_cond = x->getCond();
         TraverseStmt(clang_cond);
@@ -1720,10 +1723,12 @@ public:
 
         tmp = ASR::make_Select_t(al, Lloc(x), cond,
             current_switch_case->p, current_switch_case->size(),
-            default_stmt->p, default_stmt->size());
+            default_stmt->p, default_stmt->size(), enable_fall_through);
+        enable_fall_through = false;
         current_switch_case = current_switch_case_copy;
         default_stmt = default_stmt_copy;
         is_stmt_created = true;
+        enable_fall_through = enable_fall_through_copy;
         return true;
     }
 
@@ -1751,12 +1756,15 @@ public:
         is_break_stmt_present.set(false);
         TraverseStmt(x->getSubStmt());
         current_body = current_body_copy;
+        bool case_fall_through = true;
         if( !is_break_stmt_present.get() ) {
-            throw std::runtime_error("Case must contain break statement. Fall through not yet supported.");
+            enable_fall_through = true;
+        } else {
+            case_fall_through = false;
         }
         ASR::case_stmt_t* case_stmt = ASR::down_cast<ASR::case_stmt_t>(
             ASR::make_CaseStmt_t(al, Lloc(x), a_test.p, a_test.size(),
-            body.p, body.size()));
+            body.p, body.size(), case_fall_through));
         current_switch_case->push_back(al, case_stmt);
         is_stmt_created = false;
         return true;
