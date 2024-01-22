@@ -214,7 +214,7 @@ stmt
               expr? carriagecontrol, expr? iolength)
     | FileWrite(int label, expr? unit, expr? iomsg, expr? iostat, expr? id, expr* values, expr? separator, expr? end)
     | Return()
-    | Select(expr test, case_stmt* body, stmt* default)
+    | Select(expr test, case_stmt* body, stmt* default, bool enable_fall_through)
     | Stop(expr? code)
     | Assert(expr test, expr? msg)
     | SubroutineCall(symbol name, symbol? original_name, call_arg* args, expr? dt)
@@ -490,7 +490,8 @@ array_index = (expr? left, expr? right, expr? step)
 
 do_loop_head = (expr? v, expr? start, expr? end, expr? increment)
 
-case_stmt = CaseStmt(expr* test, stmt* body) | CaseStmt_Range(expr? start, expr? end, stmt* body)
+case_stmt = CaseStmt(expr* test, stmt* body, bool fall_through) |
+            CaseStmt_Range(expr? start, expr? end, stmt* body)
 
 type_stmt
     = TypeStmtName(symbol sym, stmt* body)
