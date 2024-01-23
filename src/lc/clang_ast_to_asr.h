@@ -1125,6 +1125,18 @@ public:
             current_scope->add_symbol("__return_var", return_sym);
         }
 
+        if (return_type != nullptr) {
+            return_var = ASRUtils::EXPR(ASR::make_Var_t(al, return_sym->base.loc, return_sym));
+        }
+
+        tmp = ASRUtils::make_Function_t_util(al, Lloc(x), current_scope, s2c(al, name), nullptr, 0,
+            args.p, args.size(), nullptr, 0, return_var, ASR::abiType::Source, ASR::accessType::Public,
+            ASR::deftypeType::Implementation, nullptr, false, false, false, false, false, nullptr, 0,
+            false, false, false);
+        ASR::symbol_t* current_function_symbol = ASR::down_cast<ASR::symbol_t>(tmp.get());
+        ASR::Function_t* current_function = ASR::down_cast<ASR::Function_t>(current_function_symbol);
+        parent_scope->add_symbol(name, current_function_symbol);
+
         Vec<ASR::stmt_t*>* current_body_copy = current_body;
         Vec<ASR::stmt_t*> body; body.reserve(al, 1);
         current_body = &body;
@@ -1132,15 +1144,8 @@ public:
             TraverseStmt(x->getBody());
         }
         current_body = current_body_copy;
-
-        if (return_type != nullptr) {
-            return_var = ASRUtils::EXPR(ASR::make_Var_t(al, return_sym->base.loc, return_sym));
-        }
-        tmp = ASRUtils::make_Function_t_util(al, Lloc(x), current_scope, s2c(al, name), nullptr, 0,
-            args.p, args.size(), body.p, body.size(), return_var, ASR::abiType::Source, ASR::accessType::Public,
-            ASR::deftypeType::Implementation, nullptr, false, false, false, false, false, nullptr, 0,
-            false, false, false);
-        parent_scope->add_symbol(name, ASR::down_cast<ASR::symbol_t>(tmp.get()));
+        current_function->m_body = body.p;
+        current_function->n_body = body.size();
         current_scope = parent_scope;
         is_stmt_created = false;
         return true;
