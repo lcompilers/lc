@@ -122,6 +122,18 @@ public:
         current_symtab = nullptr;
     }
 
+    void visit_Select(const Select_t& x) {
+        bool fall_through = false;
+        for( int i = 0; i < x.n_body; i++ ) {
+            ASR::CaseStmt_t* case_stmt_t = ASR::down_cast<ASR::CaseStmt_t>(x.m_body[i]);
+            fall_through = fall_through || case_stmt_t->m_fall_through;
+        }
+        require(fall_through == x.m_enable_fall_through,
+            "Select_t::m_enable_fall_through should be " +
+            std::to_string(x.m_enable_fall_through));
+        BaseWalkVisitor<VerifyVisitor>::visit_Select(x);
+    }
+
     // --------------------------------------------------------
     // symbol instances:
 
@@ -889,7 +901,7 @@ public:
         }
 
         SymbolTable* temp_scope = current_symtab;
-        
+
         if (asr_owner_sym && temp_scope->get_counter() != ASRUtils::symbol_parent_symtab(x.m_name)->get_counter() &&
             !ASR::is_a<ASR::ExternalSymbol_t>(*x.m_name) && !ASR::is_a<ASR::Variable_t>(*x.m_name)) {
             if (ASR::is_a<ASR::AssociateBlock_t>(*asr_owner_sym) || ASR::is_a<ASR::Block_t>(*asr_owner_sym)) {
@@ -899,7 +911,7 @@ public:
                 }
             } else {
                 function_dependencies.push_back(std::string(ASRUtils::symbol_name(x.m_name)));
-            }    
+            }
         }
 
         if( ASR::is_a<ASR::ExternalSymbol_t>(*x.m_name) ) {
@@ -1040,7 +1052,7 @@ public:
         }
 
         SymbolTable* temp_scope = current_symtab;
-        
+
         if (asr_owner_sym && temp_scope->get_counter() != ASRUtils::symbol_parent_symtab(x.m_name)->get_counter() &&
             !ASR::is_a<ASR::ExternalSymbol_t>(*x.m_name) && !ASR::is_a<ASR::Variable_t>(*x.m_name)) {
             if (ASR::is_a<ASR::AssociateBlock_t>(*asr_owner_sym) || ASR::is_a<ASR::Block_t>(*asr_owner_sym)) {
@@ -1050,7 +1062,7 @@ public:
                 }
             } else {
                 function_dependencies.push_back(std::string(ASRUtils::symbol_name(x.m_name)));
-            }    
+            }
         }
 
         if( ASR::is_a<ASR::ExternalSymbol_t>(*x.m_name) ) {
