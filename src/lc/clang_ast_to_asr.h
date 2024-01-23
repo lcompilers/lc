@@ -1104,43 +1104,64 @@ public:
 
     bool TraverseFunctionDecl(clang::FunctionDecl *x) {
         SymbolTable* parent_scope = current_scope;
-        current_scope = al.make_new<SymbolTable>(parent_scope);
-
         std::string name = x->getName().str();
-        Vec<ASR::expr_t*> args;
-        args.reserve(al, 1);
-        for (auto &p : x->parameters()) {
-            TraverseDecl(p);
-            args.push_back(al, ASRUtils::EXPR(tmp.get()));
-        }
+        ASR::symbol_t* current_function_symbol = parent_scope->resolve_symbol(name);
+        ASR::Function_t* current_function = nullptr;
 
-        ASR::ttype_t* return_type = ClangTypeToASRType(x->getReturnType());
-        ASR::symbol_t* return_sym = nullptr;
-        ASR::expr_t* return_var = nullptr;
-        if (return_type != nullptr) {
-            return_sym = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
-                current_scope, s2c(al, "__return_var"), nullptr, 0, ASR::intentType::ReturnVar, nullptr, nullptr,
-                ASR::storage_typeType::Default, return_type, nullptr, ASR::abiType::Source, ASR::accessType::Public,
-                ASR::presenceType::Required, false));
-            current_scope->add_symbol("__return_var", return_sym);
-        }
+        if( current_function_symbol == nullptr ) {
+            current_scope = al.make_new<SymbolTable>(parent_scope);
+            Vec<ASR::expr_t*> args;
+            args.reserve(al, 1);
+            for (auto &p : x->parameters()) {
+                TraverseDecl(p);
+                args.push_back(al, ASRUtils::EXPR(tmp.get()));
+            }
 
-        if (return_type != nullptr) {
-            return_var = ASRUtils::EXPR(ASR::make_Var_t(al, return_sym->base.loc, return_sym));
-        }
+            ASR::ttype_t* return_type = ClangTypeToASRType(x->getReturnType());
+            ASR::symbol_t* return_sym = nullptr;
+            ASR::expr_t* return_var = nullptr;
+            if (return_type != nullptr) {
+                return_sym = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
+                    current_scope, s2c(al, "__return_var"), nullptr, 0, ASR::intentType::ReturnVar, nullptr, nullptr,
+                    ASR::storage_typeType::Default, return_type, nullptr, ASR::abiType::Source, ASR::accessType::Public,
+                    ASR::presenceType::Required, false));
+                current_scope->add_symbol("__return_var", return_sym);
+            }
 
-        tmp = ASRUtils::make_Function_t_util(al, Lloc(x), current_scope, s2c(al, name), nullptr, 0,
-            args.p, args.size(), nullptr, 0, return_var, ASR::abiType::Source, ASR::accessType::Public,
-            ASR::deftypeType::Implementation, nullptr, false, false, false, false, false, nullptr, 0,
-            false, false, false);
-        ASR::symbol_t* current_function_symbol = ASR::down_cast<ASR::symbol_t>(tmp.get());
-        ASR::Function_t* current_function = ASR::down_cast<ASR::Function_t>(current_function_symbol);
-        parent_scope->add_symbol(name, current_function_symbol);
+            if (return_type != nullptr) {
+                return_var = ASRUtils::EXPR(ASR::make_Var_t(al, return_sym->base.loc, return_sym));
+            }
+
+            tmp = ASRUtils::make_Function_t_util(al, Lloc(x), current_scope, s2c(al, name), nullptr, 0,
+                args.p, args.size(), nullptr, 0, return_var, ASR::abiType::Source, ASR::accessType::Public,
+                ASR::deftypeType::Implementation, nullptr, false, false, false, false, false, nullptr, 0,
+                false, false, false);
+            current_function_symbol = ASR::down_cast<ASR::symbol_t>(tmp.get());
+            current_function = ASR::down_cast<ASR::Function_t>(current_function_symbol);
+            current_scope = current_function->m_symtab;
+            parent_scope->add_symbol(name, current_function_symbol);
+        } else {
+            current_function = ASR::down_cast<ASR::Function_t>(current_function_symbol);
+            current_scope = current_function->m_symtab;
+            for( size_t i = 0; i < current_function->n_args; i++ ) {
+                ASR::Var_t* argi = ASR::down_cast<ASR::Var_t>(current_function->m_args[i]);
+                if( current_scope->get_symbol(ASRUtils::symbol_name(argi->m_v)) == argi->m_v ) {
+                    current_scope->erase_symbol(ASRUtils::symbol_name(argi->m_v));
+                }
+            }
+
+            int i = 0;
+            for (auto &p : x->parameters()) {
+                TraverseDecl(p);
+                current_function->m_args[i] = ASRUtils::EXPR(tmp.get());
+                i++;
+            }
+        }
 
         Vec<ASR::stmt_t*>* current_body_copy = current_body;
         Vec<ASR::stmt_t*> body; body.reserve(al, 1);
         current_body = &body;
-        if( x->hasBody() ) {
+        if( x->doesThisDeclarationHaveABody() ) {
             TraverseStmt(x->getBody());
         }
         current_body = current_body_copy;

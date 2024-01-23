@@ -4,6 +4,9 @@
 #include <xtensor/xfixed.hpp>
 #include "xtensor/xio.hpp"
 
+xt::xtensor<double, 1> solution();
+void compare_solutions(const xt::xtensor<double, 1>& y);
+
 xt::xtensor<double, 1> solution() {
     xt::xtensor<double, 1> x = xt::empty<double>({2});
     x = {1.0, 2.0};
