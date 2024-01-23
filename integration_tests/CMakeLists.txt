@@ -206,3 +206,5 @@ RUN(NAME array_20.cpp LABELS gcc llvm NOFAST)
 RUN(NAME array_21.cpp LABELS gcc llvm NOFAST)
 RUN(NAME array_22.cpp LABELS gcc llvm NOFAST)
 RUN(NAME array_23.cpp LABELS gcc llvm NOFAST)
+
+RUN(NAME function_01.cpp LABELS gcc llvm NOFAST)
