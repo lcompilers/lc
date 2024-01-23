@@ -19,13 +19,18 @@ for( i = 0; i < c.shape(0); i++ ) {
         for( k = 0; k < c.shape(2); k++ ) {
             left = i + j + k + 3;
             right = (i + 1)*(j + 1)*(k + 1);
-            if( op_code == 0 ) {
-                if(c(i, j, k) != left + right*1.0i) {
-                    exit(2);
+            switch( op_code ) {
+                case 0: {
+                    if(c(i, j, k) != left + right*1.0i) {
+                        exit(2);
+                    }
+                    break;
                 }
-            } else if( op_code == 1 ) {
-                if(c(i, j, k) != -left  - right*1.0i) {
-                    exit(2);
+                case 1: {
+                    if(c(i, j, k) != -left  - right*1.0i) {
+                        exit(2);
+                    }
+                    break;
                 }
             }
         }
