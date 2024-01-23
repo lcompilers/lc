@@ -1714,6 +1714,7 @@ public:
         current_switch_case = &current_switch_case_;
         default_stmt = &default_stmt_;
         bool enable_fall_through_copy = enable_fall_through;
+        enable_fall_through = false;
 
         clang::Expr* clang_cond = x->getCond();
         TraverseStmt(clang_cond);
