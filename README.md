@@ -11,3 +11,11 @@ LC is the C and C++ frontend to LCompilers.
     lc --ast-dump examples/expr2.c
     lc --asr-dump examples/expr2.c
     lc --show-llvm examples/expr2.c
+
+# Tests
+
+To run tests, do:
+
+    CPATH=$CONDA_PREFIX/include ./run_tests.py
+    cd integration_tests
+    CPATH=$CONDA_PREFIX/include ./run_tests.py
