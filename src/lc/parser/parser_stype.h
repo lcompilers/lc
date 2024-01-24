@@ -1,5 +1,5 @@
-#ifndef LPYTHON_PARSER_STYPE_H
-#define LPYTHON_PARSER_STYPE_H
+#ifndef LC_PARSER_STYPE_H
+#define LC_PARSER_STYPE_H
 
 #include <cstring>
 #include <lc/ast.h>
@@ -129,4 +129,4 @@ typedef struct LCompilers::Location YYLTYPE;
 #define YYINITDEPTH 2000
 
 
-#endif // LPYTHON_PARSER_STYPE_H
+#endif // LC_PARSER_STYPE_H

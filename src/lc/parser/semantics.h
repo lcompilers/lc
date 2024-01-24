@@ -1,5 +1,5 @@
-#ifndef LPYTHON_PARSER_SEMANTICS_H
-#define LPYTHON_PARSER_SEMANTICS_H
+#ifndef LC_PARSER_SEMANTICS_H
+#define LC_PARSER_SEMANTICS_H
 
 /*
    This header file contains parser semantics: how the AST classes get

@@ -1,5 +1,5 @@
-#ifndef LPYTHON_SRC_PARSER_TOKENIZER_H
-#define LPYTHON_SRC_PARSER_TOKENIZER_H
+#ifndef LC_SRC_PARSER_TOKENIZER_H
+#define LC_SRC_PARSER_TOKENIZER_H
 
 #include <libasr/exception.h>
 #include <libasr/alloc.h>
@@ -94,4 +94,4 @@ std::string pickle_token(int token, const YYSTYPE &yystype);
 
 } // namespace LCompilers::LC
 
-#endif // LPYTHON_SRC_PARSER_TOKENIZER_H
+#endif // LC_SRC_PARSER_TOKENIZER_H
