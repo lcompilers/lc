@@ -11,9 +11,9 @@
 #include <libasr/utils.h>
 #include <lc/parser/parser_exception.h>
 
-namespace LCompilers::LPython {
+namespace LCompilers::LC {
 
-Result<LPython::AST::Module_t*> parse(Allocator &al, const std::string &s,
+Result<LC::AST::Module_t*> parse(Allocator &al, const std::string &s,
         uint32_t prev_loc, diag::Diagnostics &diagnostics)
 {
     Parser p(al, diagnostics);
@@ -37,7 +37,7 @@ Result<LPython::AST::Module_t*> parse(Allocator &al, const std::string &s,
         l.first=p.result[0]->base.loc.first;
         l.last=p.result[p.result.size()-1]->base.loc.last;
     }
-    return (LPython::AST::Module_t*)LPython::AST::make_Module_t(al, l,
+    return (LC::AST::Module_t*)LC::AST::make_Module_t(al, l,
         p.result.p, p.result.size(), p.type_ignore.p, p.type_ignore.size());
 }
 
@@ -111,20 +111,20 @@ std::string unique_filename(const std::string &prefix) {
     return filename;
 }
 
-Result<LPython::AST::ast_t*> parse_python_file(Allocator &al,
+Result<LC::AST::ast_t*> parse_python_file(Allocator &al,
         const std::string &/*runtime_library_dir*/,
         const std::string &infile,
         diag::Diagnostics &diagnostics,
         uint32_t prev_loc,
         [[maybe_unused]] bool new_parser) {
-    LPython::AST::ast_t* ast;
+    LC::AST::ast_t* ast;
     // We will be using the new parser from now on
     new_parser = true;
     LCOMPILERS_ASSERT(new_parser)
     std::string input = read_file(infile);
-    Result<LPython::AST::Module_t*> res = parse(al, input, prev_loc, diagnostics);
+    Result<LC::AST::Module_t*> res = parse(al, input, prev_loc, diagnostics);
     if (res.ok) {
-        ast = (LPython::AST::ast_t*)res.result;
+        ast = (LC::AST::ast_t*)res.result;
     } else {
         LCOMPILERS_ASSERT(diagnostics.has_error())
         return Error();
@@ -133,4 +133,4 @@ Result<LPython::AST::ast_t*> parse_python_file(Allocator &al,
 }
 
 
-} // namespace LCompilers::LPython
+} // namespace LCompilers::LC

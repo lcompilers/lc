@@ -4,7 +4,7 @@
 #include <libasr/exception.h>
 #include <libasr/diagnostics.h>
 
-namespace LCompilers::LPython {
+namespace LCompilers::LC {
 
 namespace parser_local {
 

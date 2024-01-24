@@ -7,7 +7,7 @@
    parser cpp file, nowhere else.
 
    Note that this is part of constructing the AST from the source code, not the
-   LPython semantic phase (AST -> ASR).
+   LC semantic phase (AST -> ASR).
 */
 
 #include <cstring>
@@ -17,19 +17,19 @@
 #include <lc/parser/parser_exception.h>
 
 // This is only used in parser.tab.cc, nowhere else, so we simply include
-// everything from LCompilers::LPython::AST to save typing:
-using namespace LCompilers::LPython::AST;
+// everything from LCompilers::LC::AST to save typing:
+using namespace LCompilers::LC::AST;
 using LCompilers::Location;
 using LCompilers::Vec;
-using LCompilers::LPython::Key_Val;
-using LCompilers::LPython::Args;
-using LCompilers::LPython::Arg;
-using LCompilers::LPython::Fn_Arg;
-using LCompilers::LPython::Args_;
-using LCompilers::LPython::Var_Kw;
-using LCompilers::LPython::Kw_or_Star_Arg;
-using LCompilers::LPython::Call_Arg;
-using LCompilers::LPython::Key_Val_Pattern;
+using LCompilers::LC::Key_Val;
+using LCompilers::LC::Args;
+using LCompilers::LC::Arg;
+using LCompilers::LC::Fn_Arg;
+using LCompilers::LC::Args_;
+using LCompilers::LC::Var_Kw;
+using LCompilers::LC::Kw_or_Star_Arg;
+using LCompilers::LC::Call_Arg;
+using LCompilers::LC::Key_Val_Pattern;
 
 static inline char* name2char(const ast_t *n) {
     return down_cast2<Name_t>(n)->m_id;
@@ -246,7 +246,7 @@ int dot_count = 0;
 #define TERNARY(test, body, orelse, l) make_IfExp_t(p.m_a, l, \
         EXPR(test), EXPR(body), EXPR(orelse))
 
-static inline char *extract_type_comment(LCompilers::LPython::Parser &p,
+static inline char *extract_type_comment(LCompilers::LC::Parser &p,
         Location &loc, LCompilers::Str &s) {
     std::string str = s.str();
 
@@ -534,7 +534,7 @@ static inline Args *FUNC_ARGS_01(Allocator &al, Location &l, Fn_Arg *parameters)
 #define ARGS_04(arg, ann, defaults, l) FUNC_ARG(p.m_a, l, \
         name2char((ast_t *)arg), EXPR(ann), EXPR(defaults))
 
-static inline void ADD_TYPE_COMMENT_(LCompilers::LPython::Parser &p, Location l,
+static inline void ADD_TYPE_COMMENT_(LCompilers::LC::Parser &p, Location l,
         Vec<Arg*> &x, LCompilers::Str &type_comment) {
     x[x.size() - 1]->_arg.m_type_comment = extract_type_comment(p, l, type_comment);
 }
@@ -771,7 +771,7 @@ static inline ast_t* concat_string(Allocator &al, Location &l,
             str1 = str1 + str;
             tmp = make_ConstantBytes_t(al, l, LCompilers::s2c(al, str1), nullptr);
         } else {
-            throw LCompilers::LPython::parser_local::ParserError(
+            throw LCompilers::LC::parser_local::ParserError(
                 "The byte and non-byte literals can not be combined", l);
         }
     } else {

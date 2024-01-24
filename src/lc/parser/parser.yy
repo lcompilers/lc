@@ -1,7 +1,7 @@
 %require "3.0"
 %define api.pure
-%define api.value.type {LCompilers::LPython::YYSTYPE}
-%param {LCompilers::LPython::Parser &p}
+%define api.value.type {LCompilers::LC::YYSTYPE}
+%param {LCompilers::LC::Parser &p}
 %locations
 %expect    0   // shift/reduce conflicts
 
@@ -31,13 +31,13 @@
 #include <lc/parser/tokenizer.h>
 #include <lc/parser/semantics.h>
 
-int yylex(LCompilers::LPython::YYSTYPE *yylval, YYLTYPE *yyloc,
-    LCompilers::LPython::Parser &p)
+int yylex(LCompilers::LC::YYSTYPE *yylval, YYLTYPE *yyloc,
+    LCompilers::LC::Parser &p)
 {
     return p.m_tokenizer.lex(p.m_a, *yylval, *yyloc, p.diag);
 } // ylex
 
-void yyerror(YYLTYPE *yyloc, LCompilers::LPython::Parser &p, const std::string &msg)
+void yyerror(YYLTYPE *yyloc, LCompilers::LC::Parser &p, const std::string &msg)
 {
     p.handle_yyerror(*yyloc, msg);
 }

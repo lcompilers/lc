@@ -5,7 +5,7 @@
 #include <lc/parser/parser.tab.hh>
 #include <libasr/bigint.h>
 
-namespace LCompilers::LPython {
+namespace LCompilers::LC {
 
 template<int base>
 bool adddgt(uint64_t &u, uint64_t d)
@@ -836,4 +836,4 @@ std::string pickle_token(int token, const YYSTYPE &yystype)
 }
 
 
-} // namespace LCompilers::LPython
+} // namespace LCompilers::LC

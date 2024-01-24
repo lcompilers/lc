@@ -7,7 +7,7 @@
 
 #define MAX_PAREN_LEVEL 200
 
-namespace LCompilers::LPython {
+namespace LCompilers::LC {
 
 class Tokenizer
 {
@@ -92,6 +92,6 @@ Result<std::vector<int>> tokens(Allocator &al, const std::string &input,
 std::string pickle_token(int token, const YYSTYPE &yystype);
 
 
-} // namespace LCompilers::LPython
+} // namespace LCompilers::LC
 
 #endif // LPYTHON_SRC_PARSER_TOKENIZER_H
