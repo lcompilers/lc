@@ -55,7 +55,7 @@
                         []
                         .false.
                     )
-                    []
+                    [matmul_test]
                     []
                     [(=
                         (Var 3 sum)
@@ -155,7 +155,7 @@
                                 (Variable
                                     2
                                     arr1d
-                                    []
+                                    [n]
                                     Local
                                     ()
                                     ()
@@ -176,7 +176,9 @@
                                 (Variable
                                     2
                                     arr2d
-                                    []
+                                    [nums
+                                    m
+                                    n]
                                     Local
                                     ()
                                     ()
