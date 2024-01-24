@@ -190,7 +190,7 @@ void update_call_args(Allocator &al, SymbolTable *current_scope, bool implicit_i
             }
             return sym;
         }
-        
+
         void handle_Var(ASR::expr_t* arg_expr, ASR::expr_t** expr_to_replace) {
             if (ASR::is_a<ASR::Var_t>(*arg_expr)) {
                 ASR::Var_t* arg_var = ASR::down_cast<ASR::Var_t>(arg_expr);
@@ -1461,8 +1461,10 @@ void make_ArrayBroadcast_t_util(Allocator& al, const Location& loc,
     size_t expr1_ndims) {
     ASR::ttype_t* expr1_type = ASRUtils::expr_type(expr1);
     Vec<ASR::expr_t*> shape_args;
-    shape_args.reserve(al, 1);
+    shape_args.reserve(al, 2);
     shape_args.push_back(al, expr1);
+    shape_args.push_back(al,
+        make_ConstantWithKind(make_IntegerConstant_t, make_Integer_t, 4, 4, loc));
 
     Vec<ASR::dimension_t> dims;
     dims.reserve(al, 1);
