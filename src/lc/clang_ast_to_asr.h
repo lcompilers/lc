@@ -475,6 +475,14 @@ public:
             } else {
                 throw std::runtime_error(std::string("Unrecognized type ") + template_name);
             }
+        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Record ) {
+            const clang::CXXRecordDecl* record_type = clang_type->getAsCXXRecordDecl();
+            std::string struct_name = record_type->getNameAsString();
+            ASR::symbol_t* struct_t = current_scope->resolve_symbol(struct_name);
+            if( !struct_t ) {
+                throw std::runtime_error(struct_name + " not defined.");
+            }
+            type = ASRUtils::TYPE(ASR::make_Struct_t(al, l, struct_t));
         } else {
             throw std::runtime_error("clang::QualType not yet supported " +
                 std::string(clang_type->getTypeClassName()));
@@ -484,6 +492,40 @@ public:
             type = ASRUtils::TYPE(ASR::make_Const_t(al, l, type));
         }
         return type;
+    }
+
+    bool TraverseCXXRecordDecl(clang::CXXRecordDecl* x) {
+        SymbolTable* parent_scope = current_scope;
+        current_scope = al.make_new<SymbolTable>(parent_scope);
+        std::string struct_name = x->getNameAsString();
+        Vec<char*> field_names; field_names.reserve(al, 1);
+        for( auto field = x->field_begin(); field != x->field_end(); field++ ) {
+            clang::FieldDecl* field_decl = *field;
+            TraverseFieldDecl(field_decl);
+            field_names.push_back(al, s2c(al, field_decl->getNameAsString()));
+        }
+        ASR::symbol_t* struct_t = ASR::down_cast<ASR::symbol_t>(ASR::make_StructType_t(al, Lloc(x), current_scope,
+            s2c(al, struct_name), nullptr, 0, field_names.p, field_names.size(), ASR::abiType::Source,
+            ASR::accessType::Public, false, x->isAbstract(), nullptr, 0, nullptr, nullptr));
+        parent_scope->add_symbol(struct_name, struct_t);
+        current_scope = parent_scope;
+        return true;
+    }
+
+    bool TraverseFieldDecl(clang::FieldDecl* x) {
+        std::string name = x->getName().str();
+        if( current_scope->get_symbol(name) ) {
+            throw std::runtime_error(name + std::string(" is already defined."));
+        }
+
+        ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType());
+        ASR::symbol_t *v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
+            current_scope, s2c(al, name), nullptr, 0, ASR::intentType::Local, nullptr, nullptr,
+            ASR::storage_typeType::Default, asr_type, nullptr, ASR::abiType::Source,
+            ASR::accessType::Public, ASR::presenceType::Required, false));
+        current_scope->add_symbol(name, v);
+        is_stmt_created = false;
+        return true;
     }
 
     bool TraverseParmVarDecl(clang::ParmVarDecl* x) {
@@ -549,8 +591,33 @@ public:
     }
 
     bool TraverseMemberExpr(clang::MemberExpr* x) {
-        member_name_obj.set(x->getMemberDecl()->getNameAsString());
-        return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseMemberExpr(x);
+        TraverseStmt(x->getBase());
+        ASR::expr_t* base = ASRUtils::EXPR(tmp.get());
+        std::string member_name = x->getMemberDecl()->getNameAsString();
+        if( ASR::is_a<ASR::Struct_t>(*ASRUtils::expr_type(base)) ) {
+            ASR::Struct_t* struct_t = ASR::down_cast<ASR::Struct_t>(ASRUtils::expr_type(base));
+            ASR::StructType_t* struct_type_t = ASR::down_cast<ASR::StructType_t>(
+                   ASRUtils::symbol_get_past_external(struct_t->m_derived_type));
+            ASR::symbol_t* member = struct_type_t->m_symtab->resolve_symbol(member_name);
+            if( !member ) {
+                throw std::runtime_error(member_name + " not found in the scope of " + struct_type_t->m_name);
+            }
+            std::string mangled_name = current_scope->get_unique_name(
+                member_name + "@" + struct_type_t->m_name);
+            member = ASR::down_cast<ASR::symbol_t>(ASR::make_ExternalSymbol_t(
+                al, Lloc(x), current_scope, s2c(al, mangled_name), member,
+                struct_type_t->m_name, nullptr, 0, s2c(al, member_name),
+                ASR::accessType::Public));
+            current_scope->add_symbol(mangled_name, member);
+            tmp = ASR::make_StructInstanceMember_t(al, Lloc(x), base, member,
+                ASRUtils::symbol_type(member), nullptr);
+        } else if( special_function_map.find(member_name) != special_function_map.end() ) {
+            member_name_obj.set(member_name);
+            return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseMemberExpr(x);
+        } else {
+            throw std::runtime_error("clang::MemberExpr only supported for struct and special functions.");
+        }
+        return true;
     }
 
     bool TraverseCXXMemberCallExpr(clang::CXXMemberCallExpr* x) {
@@ -675,6 +742,15 @@ public:
                     ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
                     cast_helper(obj, value, true);
                     ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), obj, value);
+                    tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
+                    is_stmt_created = true;
+                }
+                assignment_target = nullptr;
+            } else if( ASRUtils::is_complex(*ASRUtils::expr_type(obj)) ) {
+                TraverseStmt(args[1]);
+                if( !is_stmt_created ) {
+                    ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
+                    cast_helper(obj, value, true);
                     tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
                     is_stmt_created = true;
                 }
@@ -1132,10 +1208,10 @@ public:
                 return_var = ASRUtils::EXPR(ASR::make_Var_t(al, return_sym->base.loc, return_sym));
             }
 
-            tmp = ASRUtils::make_Function_t_util(al, Lloc(x), current_scope, s2c(al, name), nullptr, 0,
-                args.p, args.size(), nullptr, 0, return_var, ASR::abiType::Source, ASR::accessType::Public,
-                ASR::deftypeType::Implementation, nullptr, false, false, false, false, false, nullptr, 0,
-                false, false, false);
+            tmp = ASRUtils::make_Function_t_util(al, Lloc(x), current_scope, s2c(al, name),
+                nullptr, 0, args.p, args.size(), nullptr, 0, return_var, ASR::abiType::Source,
+                ASR::accessType::Public, ASR::deftypeType::Implementation, nullptr, false, false,
+                false, false, false, nullptr, 0, false, false, false);
             current_function_symbol = ASR::down_cast<ASR::symbol_t>(tmp.get());
             current_function = ASR::down_cast<ASR::Function_t>(current_function_symbol);
             current_scope = current_function->m_symtab;
@@ -2023,11 +2099,15 @@ class FindNamedClassConsumer: public clang::ASTConsumer {
 
 public:
 
+    Allocator& al;
+
     explicit FindNamedClassConsumer(clang::ASTContext *Context,
-        Allocator& al_, ASR::asr_t*& tu_): Visitor(Context, al_, tu_) {}
+        Allocator& al_, ASR::asr_t*& tu_): al(al_), Visitor(Context, al_, tu_) {}
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         Visitor.TraverseDecl(Context.getTranslationUnitDecl());
+        PassUtils::UpdateDependenciesVisitor dependency_visitor(al);
+        dependency_visitor.visit_TranslationUnit(*((ASR::TranslationUnit_t*) Visitor.tu));
     }
 
 private:
