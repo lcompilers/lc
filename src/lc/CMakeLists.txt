@@ -1,4 +1,8 @@
 set(SRC
+    parser/tokenizer.cpp
+    parser/parser.cpp
+    parser/parser.tab.cc
+
     utils.cpp
 )
 
