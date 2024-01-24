@@ -51,7 +51,7 @@ jobs:
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
             export CPATH=$CONDA_PREFIX/include:$CPATH
-            lc --show-ast tests/test.cpp
+            lc --show-clang-ast tests/test.cpp
             lc examples/expr2.c --show-asr
             ./run_tests.py
 

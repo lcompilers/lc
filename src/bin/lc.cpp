@@ -95,18 +95,18 @@ class ClangCheckActionFactory {
 public:
 
     std::string infile, ast_dump_file, ast_dump_filter;
-    bool ast_list, ast_print, show_ast;
+    bool ast_list, ast_print, show_clang_ast;
 
     ClangCheckActionFactory(std::string infile_, std::string ast_dump_file,
         std::string ast_dump_filter, bool ast_list,
-        bool ast_print, bool show_ast): infile(infile_),
+        bool ast_print, bool show_clang_ast): infile(infile_),
         ast_dump_file(ast_dump_file), ast_dump_filter(ast_dump_filter),
-        ast_list(ast_list), ast_print(ast_print), show_ast(show_ast) {}
+        ast_list(ast_list), ast_print(ast_print), show_clang_ast(show_clang_ast) {}
 
     std::unique_ptr<clang::ASTConsumer> newASTConsumer() {
         if (ast_list) {
             return clang::CreateASTDeclNodeLister();
-        } else if ( show_ast ) {
+        } else if ( show_clang_ast ) {
             llvm::raw_fd_ostream* llvm_fd_ostream = nullptr;
             if ( ast_dump_file.size() > 0 ) {
                 std::error_code errorCode;
@@ -689,7 +689,7 @@ int mainApp(int argc, const char **argv) {
     bool ast_list = false;
     bool ast_print = false;
     std::string ast_dump_filter = "";
-    bool show_ast = false;
+    bool show_clang_ast = false;
     bool show_asr = false;
     bool arg_no_indent = false;
     bool arg_no_color = false;
@@ -713,7 +713,7 @@ int mainApp(int argc, const char **argv) {
     app.add_flag("--ast-print", ast_print, "Build ASTs and then pretty-print them");
     app.add_flag("--ast-dump-filter", ast_dump_filter, "Use with -ast-dump or -ast-print to dump/print"
      " only AST declaration nodes having a certain substring in a qualified name.");
-    app.add_flag("--show-ast", show_ast, "Show AST for the given file and exit");
+    app.add_flag("--show-clang-ast", show_clang_ast, "Show AST for the given file and exit");
     app.add_flag("--show-asr", show_asr, "Show ASR for the given file and exit");
     app.add_flag("--no-indent", arg_no_indent, "Turn off Indented print ASR/AST");
     app.add_flag("--no-color", arg_no_color, "Turn off colored AST/ASR");
@@ -762,9 +762,9 @@ int mainApp(int argc, const char **argv) {
     std::string infile = sourcePaths[0];
 
     // Handle Clang related options in the following
-    if (show_ast || ast_list || ast_print) {
+    if (show_clang_ast || ast_list || ast_print) {
         ClangCheckActionFactory CheckFactory(infile, ast_dump_file,
-            ast_dump_filter, ast_list, ast_print, show_ast);
+            ast_dump_filter, ast_list, ast_print, show_clang_ast);
         int status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
         return status;
     }
