@@ -335,7 +335,7 @@ namespace LCompilers {
                 }
 
                 void visit_FunctionCall(const ASR::FunctionCall_t& x) {
-                    if (fill_function_dependencies) { 
+                    if (fill_function_dependencies) {
                         ASR::symbol_t* asr_owner_sym = nullptr;
                         if (current_scope->asr_owner && ASR::is_a<ASR::symbol_t>(*current_scope->asr_owner)) {
                             asr_owner_sym = ASR::down_cast<ASR::symbol_t>(current_scope->asr_owner);
@@ -352,7 +352,7 @@ namespace LCompilers {
                                 }
                             } else {
                                 function_dependencies.push_back(al, ASRUtils::symbol_name(x.m_name));
-                            }    
+                            }
                         }
                     }
                     if( ASR::is_a<ASR::ExternalSymbol_t>(*x.m_name) &&
@@ -373,7 +373,7 @@ namespace LCompilers {
                         }
 
                         SymbolTable* temp_scope = current_scope;
-                        
+
                         if (asr_owner_sym && temp_scope->get_counter() != ASRUtils::symbol_parent_symtab(x.m_name)->get_counter() &&
                             !ASR::is_a<ASR::ExternalSymbol_t>(*x.m_name) && !ASR::is_a<ASR::Variable_t>(*x.m_name)) {
                             if (ASR::is_a<ASR::AssociateBlock_t>(*asr_owner_sym) || ASR::is_a<ASR::Block_t>(*asr_owner_sym)) {
@@ -383,7 +383,7 @@ namespace LCompilers {
                                 }
                             } else {
                                 function_dependencies.push_back(al, ASRUtils::symbol_name(x.m_name));
-                            }    
+                            }
                         }
                     }
 
@@ -429,6 +429,21 @@ namespace LCompilers {
                         visit_stmt(*x.m_body[i]);
                     }
                     current_scope = parent_symtab;
+                }
+
+                void visit_StructType(const ASR::StructType_t& x) {
+                    ASR::StructType_t& xx = const_cast<ASR::StructType_t&>(x);
+                    SetChar vec; vec.reserve(al, 1);
+                    for( auto itr: x.m_symtab->get_scope() ) {
+                        ASR::ttype_t* type = ASRUtils::extract_type(
+                            ASRUtils::symbol_type(itr.second));
+                        if( ASR::is_a<ASR::Struct_t>(*type) ) {
+                            ASR::Struct_t* struct_t = ASR::down_cast<ASR::Struct_t>(type);
+                            vec.push_back(al, ASRUtils::symbol_name(struct_t->m_derived_type));
+                        }
+                    }
+                    xx.m_dependencies = vec.p;
+                    xx.n_dependencies = vec.size();
                 }
         };
 
