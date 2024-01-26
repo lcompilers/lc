@@ -713,7 +713,7 @@ int mainApp(int argc, const char **argv) {
     app.add_flag("--ast-print", ast_print, "Build ASTs and then pretty-print them");
     app.add_flag("--ast-dump-filter", ast_dump_filter, "Use with -ast-dump or -ast-print to dump/print"
      " only AST declaration nodes having a certain substring in a qualified name.");
-    app.add_flag("--show-clang-ast", show_clang_ast, "Show AST for the given file and exit");
+    app.add_flag("--show-clang-ast", show_clang_ast, "Show Clang AST for the given file and exit");
     app.add_flag("--show-asr", show_asr, "Show ASR for the given file and exit");
     app.add_flag("--no-indent", arg_no_indent, "Turn off Indented print ASR/AST");
     app.add_flag("--no-color", arg_no_color, "Turn off colored AST/ASR");
