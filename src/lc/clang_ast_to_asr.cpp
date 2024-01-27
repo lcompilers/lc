@@ -1,29 +1,16 @@
 #include <clang/AST/ASTConsumer.h>
+#include <clang/Frontend/ASTConsumers.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Frontend/FrontendActions.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
-
-#include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
-#include "clang/Driver/Options.h"
-#include "clang/Frontend/ASTConsumers.h"
-#include "clang/Rewrite/Frontend/FixItRewriter.h"
-#include "clang/Rewrite/Frontend/FrontendActions.h"
-#include "clang/StaticAnalyzer/Frontend/FrontendActions.h"
-#include "clang/Tooling/CommonOptionsParser.h"
-#include "clang/Tooling/Syntax/BuildTree.h"
-#include "clang/Tooling/Syntax/TokenBufferTokenManager.h"
-#include "clang/Tooling/Syntax/Tokens.h"
-#include "clang/Tooling/Syntax/Tree.h"
-#include "clang/Tooling/Tooling.h"
+#include <clang/Driver/Options.h>
 
 #include <libasr/pickle.h>
 #include <libasr/pass/intrinsic_array_function_registry.h>
 #include <lc/clang_ast_to_asr.h>
-
-#include <iostream>
 
 namespace LCompilers {
 
