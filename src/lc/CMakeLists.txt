@@ -3,6 +3,7 @@ set(SRC
     parser/parser.cpp
     parser/parser.tab.cc
 
+    clang_ast_to_asr.cpp
     utils.cpp
 )
 
