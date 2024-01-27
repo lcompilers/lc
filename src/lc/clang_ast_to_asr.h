@@ -23,8 +23,8 @@
 #include "clang/Tooling/Tooling.h"
 
 #include <libasr/pickle.h>
-#include <libasr/asr_utils.h>
 #include <libasr/pass/intrinsic_array_function_registry.h>
+#include <lc/clang_ast_to_asr2.h>
 
 #include <iostream>
 
@@ -2132,6 +2132,106 @@ class FindNamedClassAction: public clang::ASTFrontendAction {
         }
 };
 
+class ClangCheckActionFactory {
+
+public:
+
+    std::string infile, ast_dump_file, ast_dump_filter;
+    bool ast_list, ast_print, show_clang_ast;
+
+    ClangCheckActionFactory(std::string infile_, std::string ast_dump_file,
+        std::string ast_dump_filter, bool ast_list,
+        bool ast_print, bool show_clang_ast): infile(infile_),
+        ast_dump_file(ast_dump_file), ast_dump_filter(ast_dump_filter),
+        ast_list(ast_list), ast_print(ast_print), show_clang_ast(show_clang_ast) {}
+
+    std::unique_ptr<clang::ASTConsumer> newASTConsumer() {
+        if (ast_list) {
+            return clang::CreateASTDeclNodeLister();
+        } else if ( show_clang_ast ) {
+            llvm::raw_fd_ostream* llvm_fd_ostream = nullptr;
+            if ( ast_dump_file.size() > 0 ) {
+                std::error_code errorCode;
+                llvm_fd_ostream = new llvm::raw_fd_ostream(ast_dump_file, errorCode);
+            }
+            std::unique_ptr<llvm::raw_ostream> llvm_ostream(llvm_fd_ostream);
+            return clang::CreateASTDumper(std::move(llvm_ostream), ast_dump_filter,
+                                          /*DumpDecls=*/true,
+                                          /*Deserialize=*/false,
+                                          /*DumpLookups=*/false,
+                                          /*DumpDeclTypes=*/false,
+                                          clang::ADOF_Default);
+        } else if (ast_print) {
+            return clang::CreateASTPrinter(nullptr, ast_dump_filter);
+        }
+        return std::make_unique<clang::ASTConsumer>();
+    }
+};
+
+template <typename T>
+class LCompilersFrontendActionFactory : public clang::tooling::FrontendActionFactory {
+
+public:
+
+    Allocator& al;
+    ASR::asr_t*& tu;
+
+    LCompilersFrontendActionFactory(Allocator& al_, ASR::asr_t*& tu_):
+        al(al_), tu(tu_) {}
+
+    std::unique_ptr<clang::FrontendAction> create() override {
+        return std::make_unique<T>(al, tu);
+    }
+};
+
+template <typename T>
+clang::tooling::FrontendActionFactory* newFrontendActionLCompilersFactory(Allocator& al_, ASR::asr_t*& tu_) {
+    return new LCompilersFrontendActionFactory<T>(al_, tu_);
 }
+
+namespace LC {
+
+static llvm::Expected<clang::tooling::CommonOptionsParser> get_parser(std::string infile) {
+    static llvm::cl::OptionCategory ClangCheckCategory("clang-check options");
+    static const llvm::opt::OptTable &Options = clang::driver::getDriverOptTable();
+    int clang_argc = 3;
+    const char *clang_argv[] = {"lc", infile.c_str(), "--"};
+    return clang::tooling::CommonOptionsParser::create(clang_argc, clang_argv, ClangCheckCategory);
+}
+
+int dump_clang_ast(std::string infile, std::string ast_dump_file,
+    std::string ast_dump_filter, bool ast_list, bool ast_print, bool show_clang_ast) {
+    auto ExpectedParser = get_parser(infile);
+    if (!ExpectedParser) {
+        llvm::errs() << ExpectedParser.takeError();
+        return 1;
+    }
+    clang::tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();
+    std::vector<std::string> sourcePaths = OptionsParser.getSourcePathList();
+    clang::tooling::ClangTool Tool(OptionsParser.getCompilations(), sourcePaths);
+
+    ClangCheckActionFactory CheckFactory(infile, ast_dump_file,
+        ast_dump_filter, ast_list, ast_print, show_clang_ast);
+    return Tool.run(clang::tooling::newFrontendActionFactory(&CheckFactory).get());
+}
+
+int clang_ast_to_asr(Allocator &al, std::string infile, ASR::asr_t*& tu) {
+    auto ExpectedParser = get_parser(infile);
+    if (!ExpectedParser) {
+        llvm::errs() << ExpectedParser.takeError();
+        return 1;
+    }
+    clang::tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();
+    std::vector<std::string> sourcePaths = OptionsParser.getSourcePathList();
+    clang::tooling::ClangTool Tool(OptionsParser.getCompilations(), sourcePaths);
+
+    clang::tooling::FrontendActionFactory* FrontendFactory;
+    FrontendFactory = newFrontendActionLCompilersFactory<FindNamedClassAction>(al, tu);
+    return Tool.run(FrontendFactory);
+}
+
+} // namespace LC
+
+} // namespace LCompilers
 
 #endif
