@@ -35,23 +35,6 @@ using namespace clang::driver;
 using namespace clang::tooling;
 using namespace llvm;
 
-// Constructs an empty compilation database
-// and thus helps avoid compilation database not found errors.
-class LCCompilationDatabase : public CompilationDatabasePlugin {
-public:
-  ~LCCompilationDatabase() {}
-
-  std::unique_ptr<CompilationDatabase>
-  loadFromDirectory(StringRef Directory, std::string &ErrorMessage) {
-    return std::make_unique<FixedCompilationDatabase>(".", std::vector<std::string>());
-  }
-};
-
-static CompilationDatabasePluginRegistry::Add<LCCompilationDatabase>
-    LCCompilationDatabasePlugin("lc-compilation-database",
-    "Constructs an empty compilation database.");
-
-
 enum class Backend {
     llvm, wasm, c, cpp, x86, fortran
 };
@@ -747,8 +730,8 @@ int mainApp(int argc, const char **argv) {
 
     static cl::OptionCategory ClangCheckCategory("clang-check options");
     static const opt::OptTable &Options = getDriverOptTable();
-    int clang_argc = 2;
-    const char *clang_argv[] = {"lc", arg_files[0].c_str()};
+    int clang_argc = 3;
+    const char *clang_argv[] = {"lc", arg_files[0].c_str(), "--"};
     auto ExpectedParser = CommonOptionsParser::create(clang_argc, clang_argv, ClangCheckCategory);
     if (!ExpectedParser) {
         llvm::errs() << ExpectedParser.takeError();
