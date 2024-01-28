@@ -1,15 +1,6 @@
 #define CLI11_HAS_FILESYSTEM 0
 #include <bin/CLI11.hpp>
 
-#include <clang/AST/ASTConsumer.h>
-#include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/Frontend/CompilerInstance.h>
-#include <clang/Frontend/FrontendAction.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/Tooling/CommonOptionsParser.h>
-#include <clang/Tooling/CompilationDatabasePluginRegistry.h>
-#include <clang/Tooling/Tooling.h>
-
 #include <libasr/alloc.h>
 #include <libasr/asr_scopes.h>
 #include <libasr/asr.h>
@@ -31,26 +22,7 @@
 
 #include <iostream>
 
-using namespace clang::driver;
-using namespace clang::tooling;
 using namespace llvm;
-
-// Constructs an empty compilation database
-// and thus helps avoid compilation database not found errors.
-class LCCompilationDatabase : public CompilationDatabasePlugin {
-public:
-  ~LCCompilationDatabase() {}
-
-  std::unique_ptr<CompilationDatabase>
-  loadFromDirectory(StringRef Directory, std::string &ErrorMessage) {
-    return std::make_unique<FixedCompilationDatabase>(".", std::vector<std::string>());
-  }
-};
-
-static CompilationDatabasePluginRegistry::Add<LCCompilationDatabase>
-    LCCompilationDatabasePlugin("lc-compilation-database",
-    "Constructs an empty compilation database.");
-
 
 enum class Backend {
     llvm, wasm, c, cpp, x86, fortran
@@ -88,67 +60,6 @@ std::string construct_outfile(std::string &arg_file, std::string &ArgO) {
         outfile = basename + ".out";
     }
     return outfile;
-}
-
-class ClangCheckActionFactory {
-
-public:
-
-    std::string infile, ast_dump_file, ast_dump_filter;
-    bool ast_list, ast_print, show_clang_ast;
-
-    ClangCheckActionFactory(std::string infile_, std::string ast_dump_file,
-        std::string ast_dump_filter, bool ast_list,
-        bool ast_print, bool show_clang_ast): infile(infile_),
-        ast_dump_file(ast_dump_file), ast_dump_filter(ast_dump_filter),
-        ast_list(ast_list), ast_print(ast_print), show_clang_ast(show_clang_ast) {}
-
-    std::unique_ptr<clang::ASTConsumer> newASTConsumer() {
-        if (ast_list) {
-            return clang::CreateASTDeclNodeLister();
-        } else if ( show_clang_ast ) {
-            llvm::raw_fd_ostream* llvm_fd_ostream = nullptr;
-            if ( ast_dump_file.size() > 0 ) {
-                std::error_code errorCode;
-                llvm_fd_ostream = new llvm::raw_fd_ostream(ast_dump_file, errorCode);
-            }
-            std::unique_ptr<llvm::raw_ostream> llvm_ostream(llvm_fd_ostream);
-            return clang::CreateASTDumper(std::move(llvm_ostream), ast_dump_filter,
-                                          /*DumpDecls=*/true,
-                                          /*Deserialize=*/false,
-                                          /*DumpLookups=*/false,
-                                          /*DumpDeclTypes=*/false,
-                                          clang::ADOF_Default);
-        } else if (ast_print) {
-            return clang::CreateASTPrinter(nullptr, ast_dump_filter);
-        }
-        return std::make_unique<clang::ASTConsumer>();
-    }
-};
-
-namespace LCompilers {
-
-    template <typename T>
-    class LCompilersFrontendActionFactory : public FrontendActionFactory {
-
-    public:
-
-        Allocator& al;
-        ASR::asr_t*& tu;
-
-        LCompilersFrontendActionFactory(Allocator& al_, ASR::asr_t*& tu_):
-            al(al_), tu(tu_) {}
-
-        std::unique_ptr<clang::FrontendAction> create() override {
-            return std::make_unique<T>(al, tu);
-        }
-    };
-
-    template <typename T>
-    FrontendActionFactory* newFrontendActionLCompilersFactory(Allocator& al_, ASR::asr_t*& tu_) {
-        return new LCompilersFrontendActionFactory<T>(al_, tu_);
-    }
-
 }
 
 #define DeclareLCompilersUtilVars \
@@ -745,36 +656,18 @@ int mainApp(int argc, const char **argv) {
         return 0;
     }
 
-    static cl::OptionCategory ClangCheckCategory("clang-check options");
-    static const opt::OptTable &Options = getDriverOptTable();
-    int clang_argc = 2;
-    const char *clang_argv[] = {"lc", arg_files[0].c_str()};
-    auto ExpectedParser = CommonOptionsParser::create(clang_argc, clang_argv, ClangCheckCategory);
-    if (!ExpectedParser) {
-        llvm::errs() << ExpectedParser.takeError();
-        return 1;
-    }
-
-    CommonOptionsParser &OptionsParser = ExpectedParser.get();
-    std::vector<std::string> sourcePaths = OptionsParser.getSourcePathList();
-    ClangTool Tool(OptionsParser.getCompilations(), sourcePaths);
-
-    std::string infile = sourcePaths[0];
+    std::string infile = arg_files[0];
 
     // Handle Clang related options in the following
     if (show_clang_ast || ast_list || ast_print) {
-        ClangCheckActionFactory CheckFactory(infile, ast_dump_file,
+        return LCompilers::LC::dump_clang_ast(infile, ast_dump_file,
             ast_dump_filter, ast_list, ast_print, show_clang_ast);
-        int status = Tool.run(newFrontendActionFactory(&CheckFactory).get());
-        return status;
     }
 
     // Handle LC related options
     Allocator al(4*1024);
     LCompilers::ASR::asr_t* tu = nullptr;
-    FrontendActionFactory* FrontendFactory;
-    FrontendFactory = LCompilers::newFrontendActionLCompilersFactory<LCompilers::FindNamedClassAction>(al, tu);
-    int status = Tool.run(FrontendFactory);
+    int status = LCompilers::LC::clang_ast_to_asr(al, infile, tu);
     if (status != 0) {
         return status;
     }
