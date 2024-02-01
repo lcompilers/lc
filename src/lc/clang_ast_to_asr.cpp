@@ -730,7 +730,9 @@ public:
                     is_stmt_created = true;
                 }
                 assignment_target = nullptr;
-            } else if( ASRUtils::is_complex(*ASRUtils::expr_type(obj)) ) {
+            } else if( ASRUtils::is_complex(*ASRUtils::expr_type(obj)) ||
+                       ASR::is_a<ASR::Struct_t>(*ASRUtils::extract_type(
+                        ASRUtils::expr_type(obj))) ) {
                 TraverseStmt(args[1]);
                 if( !is_stmt_created ) {
                     ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
