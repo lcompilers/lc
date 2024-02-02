@@ -1869,15 +1869,19 @@ public:
     }
 
     bool TraverseCompoundStmt(clang::CompoundStmt *x) {
+        std::map<std::string, std::string> alias;
+        scopes.push_back(alias);
         for (auto &s : x->body()) {
             bool is_stmt_created_ = is_stmt_created;
             is_stmt_created = false;
             TraverseStmt(s);
             if( is_stmt_created ) {
                 current_body->push_back(al, ASRUtils::STMT(tmp.get()));
+                is_stmt_created = false;
             }
-            is_stmt_created_ = is_stmt_created;
+            is_stmt_created = is_stmt_created_;
         }
+        scopes.pop_back();
         return true;
     }
 
