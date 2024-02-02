@@ -2603,6 +2603,9 @@ static inline ASR::expr_t* expr_value0(ASR::expr_t *f)
         elif name.endswith("Constant") or name == "IntegerBOZ":
             self.emit("case ASR::exprType::%s: { return f; }"\
                     % (name), 2, new_line=False)
+        elif name == "AddressOf" or name == "DereferencePointer":
+            self.emit("case ASR::exprType::%s: { return nullptr; }"\
+                    % (name), 2, new_line=False)
         else:
             self.emit("case ASR::exprType::%s: { return ((ASR::%s_t*)f)->m_value; }"\
                     % (name, name), 2, new_line=False)
