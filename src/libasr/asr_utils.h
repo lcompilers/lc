@@ -210,8 +210,14 @@ static inline int extract_kind_from_ttype_t(const ASR::ttype_t* type) {
 
 static inline ASR::Variable_t* EXPR2VAR(const ASR::expr_t *f)
 {
-    return ASR::down_cast<ASR::Variable_t>(symbol_get_past_external(
-                ASR::down_cast<ASR::Var_t>(f)->m_v));
+    if( ASR::is_a<ASR::Var_t>(*f) ) {
+        return ASR::down_cast<ASR::Variable_t>(symbol_get_past_external(
+                    ASR::down_cast<ASR::Var_t>(f)->m_v));
+    } else if( ASR::is_a<ASR::DereferencePointer_t>(*f) ) {
+        return ASR::down_cast<ASR::Variable_t>(symbol_get_past_external(
+                    ASR::down_cast<ASR::DereferencePointer_t>(f)->m_v));
+    }
+    return nullptr;
 }
 
 static inline ASR::Function_t* EXPR2FUN(const ASR::expr_t *f)
