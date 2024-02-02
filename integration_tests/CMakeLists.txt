@@ -215,5 +215,6 @@ RUN(NAME struct_04.cpp LABELS gcc llvm NOFAST)
 
 RUN(NAME pointer_01.cpp LABELS gcc llvm NOFAST)
 RUN(NAME pointer_02.cpp LABELS gcc llvm NOFAST)
+RUN(NAME pointer_03.cpp LABELS gcc llvm NOFAST)
 
 RUN(NAME function_01.cpp LABELS gcc llvm NOFAST)
