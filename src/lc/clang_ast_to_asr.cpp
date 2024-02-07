@@ -692,10 +692,10 @@ public:
                 print_args = nullptr;
                 is_stmt_created = true;
             }
-        } else if( cxx_operator_name == "operator()" ) {
+        } else if( cxx_operator_name == "operator()" || cxx_operator_name == "operator[]" ) {
             clang::Expr** args = x->getArgs();
             if( x->getNumArgs() == 0 ) {
-                throw std::runtime_error("operator() needs at least the callee to be present.");
+                throw std::runtime_error(cxx_operator_name + " needs at least the callee to be present.");
             }
 
             TraverseStmt(args[0]);
@@ -1672,7 +1672,7 @@ public:
             name == "range" || name == "pow" || name == "equal" ||
             name == "operator<" || name == "operator<=" || name == "operator>=" ||
             name == "operator!=" || name == "operator\"\"i" || name == "sin" ||
-            name == "cos" || name == "amin" ) {
+            name == "cos" || name == "amin" || name == "operator[]" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
