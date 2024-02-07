@@ -210,17 +210,6 @@ public:
         return dummy_variable_sym;
     }
 
-    ASR::asr_t* make_Assignment_t_util(Allocator &al, const Location &a_loc,
-        ASR::expr_t* a_target, ASR::expr_t* a_value, ASR::stmt_t* a_overloaded) {
-        if( ASR::is_a<ASR::AddressOf_t>(*a_value) ) {
-            a_value = ASRUtils::EXPR(ASR::make_Var_t(al, a_value->base.loc,
-                ASR::down_cast<ASR::AddressOf_t>(a_value)->m_v));
-            return ASR::make_Associate_t(al, a_loc, a_target, a_value);
-        }
-
-        return ASR::make_Assignment_t(al, a_loc, a_target, a_value, a_overloaded);
-    }
-
     void construct_program() {
         // Convert the main function into a program
         ASR::TranslationUnit_t* tu = (ASR::TranslationUnit_t*)this->tu;
@@ -247,7 +236,7 @@ public:
 
         ASR::symbol_t* exit_variable_sym = declare_dummy_variable("exit_code", program_scope, loc, int32_type);
         ASR::expr_t* variable_var = ASRUtils::EXPR(ASR::make_Var_t(al, loc, exit_variable_sym));
-        ASR::asr_t* assign_stmt = make_Assignment_t_util(al, loc, variable_var, ASRUtils::EXPR(func_call_main), nullptr);
+        ASR::asr_t* assign_stmt = ASR::make_Assignment_t(al, loc, variable_var, ASRUtils::EXPR(func_call_main), nullptr);
 
         prog_body.push_back(al, ASRUtils::STMT(assign_stmt));
 
@@ -737,7 +726,7 @@ public:
                     ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
                     cast_helper(obj, value, true);
                     ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), obj, value);
-                    tmp = make_Assignment_t_util(al, Lloc(x), obj, value, nullptr);
+                    tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
                     is_stmt_created = true;
                 }
                 assignment_target = nullptr;
@@ -748,7 +737,7 @@ public:
                 if( !is_stmt_created ) {
                     ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
                     cast_helper(obj, value, true);
-                    tmp = make_Assignment_t_util(al, Lloc(x), obj, value, nullptr);
+                    tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
                     is_stmt_created = true;
                 }
                 assignment_target = nullptr;
@@ -973,7 +962,7 @@ public:
                 ASR::abiType::Source, false, target_physical_type, override_physical_type, false);
             ASR::expr_t* new_shape = ASRUtils::cast_to_descriptor(al, args.p[0]);
             tmp = ASR::make_ArrayReshape_t(al, Lloc(x), callee, new_shape, target_type, nullptr);
-            tmp = make_Assignment_t_util(al, Lloc(x), callee, ASRUtils::EXPR(tmp.get()), nullptr);
+            tmp = ASR::make_Assignment_t(al, Lloc(x), callee, ASRUtils::EXPR(tmp.get()), nullptr);
             is_stmt_created = true;
         } else if (sf == SpecialFunc::Size) {
             if( args.size() != 0 ) {
@@ -993,7 +982,7 @@ public:
 
             ASR::expr_t* arg = args.p[0];
             ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), callee, arg);
-            tmp = make_Assignment_t_util(al, Lloc(x), callee, arg, nullptr);
+            tmp = ASR::make_Assignment_t(al, Lloc(x), callee, arg, nullptr);
             is_stmt_created = true;
         } else if( sf == SpecialFunc::All ) {
             // Handles xt::all() - no arguments
@@ -1342,7 +1331,7 @@ public:
             if( tmp != nullptr && !is_stmt_created ) {
                 ASR::expr_t* init_val = ASRUtils::EXPR(tmp.get());
                 add_reshape_if_needed(init_val, var);
-                tmp = make_Assignment_t_util(al, Lloc(x), var, init_val, nullptr);
+                tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
                 is_stmt_created = true;
             }
         }
@@ -1556,7 +1545,7 @@ public:
         if( op == clang::BO_Assign ) {
             cast_helper(x_lhs, x_rhs, true);
             ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), x_lhs, x_rhs);
-            tmp = make_Assignment_t_util(al, Lloc(x), x_lhs, x_rhs, nullptr);
+            tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, x_rhs, nullptr);
             is_stmt_created = true;
         } else {
             bool is_binop = false, is_cmpop = false;
@@ -1700,10 +1689,22 @@ public:
     }
 
     void cast_helper(ASR::expr_t*& left, ASR::expr_t*& right, bool is_assign) {
+        bool no_cast = ((ASR::is_a<ASR::Pointer_t>(*ASRUtils::expr_type(left)) &&
+                        ASR::is_a<ASR::Var_t>(*left)) ||
+                        (ASR::is_a<ASR::Pointer_t>(*ASRUtils::expr_type(right)) &&
+                        ASR::is_a<ASR::Var_t>(*right)));
         ASR::ttype_t *right_type = ASRUtils::expr_type(right);
         ASR::ttype_t *left_type = ASRUtils::expr_type(left);
         left_type = ASRUtils::extract_type(left_type);
         right_type = ASRUtils::extract_type(right_type);
+        if( no_cast ) {
+            int lkind = ASRUtils::extract_kind_from_ttype_t(left_type);
+            int rkind = ASRUtils::extract_kind_from_ttype_t(right_type);
+            if( left_type->type != right_type->type || lkind != rkind ) {
+                throw SemanticError("Casting for mismatching pointer types not supported yet.",
+                                    right_type->base.loc);
+            }
+        }
 
         // Handle presence of logical types in binary operations
         // by converting them into 32-bit integers.
@@ -1889,7 +1890,7 @@ public:
         ASR::symbol_t* return_sym = current_scope->resolve_symbol("__return_var");
         ASR::expr_t* return_var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), return_sym));
         TraverseStmt(x->getRetValue());
-        tmp = make_Assignment_t_util(al, Lloc(x), return_var, ASRUtils::EXPR(tmp.get()), nullptr);
+        tmp = ASR::make_Assignment_t(al, Lloc(x), return_var, ASRUtils::EXPR(tmp.get()), nullptr);
         current_body->push_back(al, ASRUtils::STMT(tmp.get()));
         tmp = ASR::make_Return_t(al, Lloc(x));
         is_stmt_created = true;
@@ -1942,7 +1943,7 @@ public:
         ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp.get());
         CreateBinOp(x_lhs, x_rhs, ASR::binopType::Add, Lloc(x));
         ASR::expr_t* sum_expr = ASRUtils::EXPR(tmp.get());
-        tmp = make_Assignment_t_util(al, Lloc(x), x_lhs, sum_expr, nullptr);
+        tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, sum_expr, nullptr);
         is_stmt_created = true;
         return true;
     }
@@ -1959,7 +1960,7 @@ public:
                     ASRUtils::EXPR(ASR::make_IntegerConstant_t(
                         al, Lloc(x), 1, ASRUtils::expr_type(var))),
                     ASRUtils::expr_type(var), nullptr));
-                tmp = make_Assignment_t_util(al, Lloc(x), var, incbyone, nullptr);
+                tmp = ASR::make_Assignment_t(al, Lloc(x), var, incbyone, nullptr);
                 is_stmt_created = true;
                 break;
             }
@@ -1971,31 +1972,8 @@ public:
                 CreateLogicalNot(var, Lloc(x));
                 break;
             }
-            case clang::UnaryOperatorKind::UO_AddrOf: {
-                if( !ASR::is_a<ASR::Var_t>(*var) ) {
-                    throw std::runtime_error("Address of operator is only supported for symbols.");
-                }
-
-                ASR::Var_t* var_t = ASR::down_cast<ASR::Var_t>(var);
-                tmp = ASR::make_AddressOf_t(al, Lloc(x), var_t->m_v, ASRUtils::TYPE(
-                    ASR::make_Pointer_t(al, Lloc(x), ASRUtils::expr_type(var))));
-                is_stmt_created = false;
-                break;
-            }
-            case clang::UnaryOperatorKind::UO_Deref: {
-                if( !ASR::is_a<ASR::Var_t>(*var) ) {
-                    throw std::runtime_error("Dereference operator is only supported for symbols.");
-                }
-
-                ASR::Var_t* var_t = ASR::down_cast<ASR::Var_t>(var);
-                tmp = ASR::make_DereferencePointer_t(al, Lloc(x), var_t->m_v,
-                    ASRUtils::type_get_past_pointer(ASRUtils::expr_type(var)));
-                is_stmt_created = false;
-                break;
-            }
             default: {
-                throw std::runtime_error("Only postfix increment, minus and "
-                    "address of operators are supported so far.");
+                throw std::runtime_error("Only postfix increment and minus are supported so far.");
             }
         }
         return true;
