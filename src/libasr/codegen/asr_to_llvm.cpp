@@ -6520,19 +6520,10 @@ public:
         }
     }
 
-    template <typename T>
-    void visit_SymbolContainingExpr(const T& x) {
+    void visit_Var(const ASR::Var_t &x) {
         ASR::Variable_t *v = ASR::down_cast<ASR::Variable_t>(
                 symbol_get_past_external(x.m_v));
         fetch_var(v);
-    }
-
-    void visit_Var(const ASR::Var_t& x) {
-        visit_SymbolContainingExpr(x);
-    }
-
-    void visit_DereferencePointer(const ASR::DereferencePointer_t& x) {
-        visit_SymbolContainingExpr(x);
     }
 
     inline ASR::ttype_t* extract_ttype_t_from_expr(ASR::expr_t* expr) {
