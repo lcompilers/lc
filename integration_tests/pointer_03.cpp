@@ -12,7 +12,7 @@ int main() {
 
     {
         #define z -(x*2 + y*2) * cos(theta)
-        float v;
+        float v; // TODO: Convert to float* later
         v = myreal;
         std::cout << a + z << " " << a - z << " " << v << std::endl;
         v = v * 4.6;
