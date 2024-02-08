@@ -311,8 +311,6 @@ expr
     | DictLen(expr arg, ttype type, expr? value)
 
     | Var(symbol v)
-    | AddressOf(symbol v, ttype type)
-    | DereferencePointer(symbol v, ttype type)
     | FunctionParam(int param_number, ttype type, expr? value) --- used in types
 
     | ArrayConstant(expr* args, ttype type, arraystorage storage_format)
