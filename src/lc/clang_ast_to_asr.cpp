@@ -37,6 +37,7 @@ enum SpecialFunc {
     Pow,
     Reshape,
     Iota,
+    Sqrt,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -62,6 +63,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"pow", SpecialFunc::Pow},
     {"reshape", SpecialFunc::Reshape},
     {"operator\"\"i", SpecialFunc::Iota},
+    {"sqrt", SpecialFunc::Sqrt},
 };
 
 class OneTimeUseString {
@@ -568,8 +570,8 @@ public:
         clang::Expr* sub_expr = x->getSubExpr();
         TraverseStmt(sub_expr);
         ASR::expr_t* arg = ASRUtils::EXPR(tmp.get());
-        tmp = ASR::make_Cast_t(al, Lloc(x), arg, asr_cast_kind,
-                ClangTypeToASRType(x->getType()), nullptr);
+        tmp = ASRUtils::make_Cast_t_value(al, Lloc(x), arg, asr_cast_kind,
+                ClangTypeToASRType(x->getType()));
         is_stmt_created = false;
         return true;
     }
@@ -1018,6 +1020,10 @@ public:
             }
 
             CreateBinOp(args.p[0], args.p[1], ASR::binopType::Pow, Lloc(x));
+        } else if( sf == SpecialFunc::Sqrt ) {
+            tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
+                static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Sqrt),
+                args.p, args.size(), 0, ASRUtils::expr_type(args.p[0]), nullptr);
         } else if( sf == SpecialFunc::Abs ) {
             tmp = ASRUtils::make_IntrinsicScalarFunction_t_util(al, Lloc(x),
                 static_cast<int64_t>(ASRUtils::IntrinsicScalarFunctions::Abs),
@@ -1300,6 +1306,37 @@ public:
         expr = reshaped_expr;
     }
 
+    bool TraverseCXXTemporaryObjectExpr(clang::CXXTemporaryObjectExpr *x) {
+        std::string type_name = x->getConstructor()->getNameAsString();
+        ASR::symbol_t* s = current_scope->resolve_symbol(type_name);
+        if( s == nullptr ) {
+            throw std::runtime_error(type_name + " not found in current scope.");
+        }
+
+        ASR::StructType_t* struct_type_t = ASR::down_cast<ASR::StructType_t>(s);
+        Vec<ASR::call_arg_t> struct_constructor_args;
+        struct_constructor_args.reserve(al, x->getNumArgs());
+        for( size_t i = 0; i < x->getNumArgs(); i++ ) {
+            TraverseStmt(x->getArg(i));
+            ASR::call_arg_t call_arg;
+            call_arg.loc = Lloc(x);
+            call_arg.m_value = ASRUtils::EXPR(tmp.get());
+            ASR::ttype_t* orig_type = ASRUtils::symbol_type(
+                struct_type_t->m_symtab->resolve_symbol(struct_type_t->m_members[i]));
+            ASR::ttype_t* arg_type = ASRUtils::expr_type(call_arg.m_value);
+            if( !ASRUtils::types_equal(orig_type, arg_type, true) ) {
+                throw std::runtime_error(type_name + std::to_string(i) +
+                    "-th constructor argument's type, " + ASRUtils::type_to_str(arg_type) +
+                    ", is not compatible with " + std::string(struct_type_t->m_members[i]) +
+                    " member's type, " + ASRUtils::type_to_str(orig_type));
+            }
+            struct_constructor_args.push_back(al, call_arg);
+        }
+        tmp = ASR::make_StructTypeConstructor_t(al, Lloc(x), s, struct_constructor_args.p,
+            struct_constructor_args.size(), ClangTypeToASRType(x->getType()), nullptr);
+        return true;
+    }
+
     bool TraverseVarDecl(clang::VarDecl *x) {
         std::string name = x->getName().str();
         if( scopes.size() > 0 ) {
@@ -1330,9 +1367,22 @@ public:
             assignment_target = nullptr;
             if( tmp != nullptr && !is_stmt_created ) {
                 ASR::expr_t* init_val = ASRUtils::EXPR(tmp.get());
-                add_reshape_if_needed(init_val, var);
-                tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
-                is_stmt_created = true;
+                if( ASR::is_a<ASR::Const_t>(*asr_type) ) {
+                    if( !ASRUtils::is_value_constant(ASRUtils::expr_value(init_val)) &&
+                        !ASR::is_a<ASR::StructTypeConstructor_t>(*init_val) ) {
+                        throw std::runtime_error("Initialisation expression of "
+                            "constant variables must reduce to a constant value.");
+                    }
+
+                    ASR::Variable_t* variable_t = ASR::down_cast<ASR::Variable_t>(v);
+                    variable_t->m_symbolic_value = init_val;
+                    variable_t->m_value = ASRUtils::expr_value(init_val);
+                    variable_t->m_storage = ASR::storage_typeType::Parameter;
+                } else {
+                    add_reshape_if_needed(init_val, var);
+                    tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
+                    is_stmt_created = true;
+                }
             }
         }
         return true;
@@ -1489,22 +1539,83 @@ public:
         }
     }
 
+    template <typename T>
+    void evaluate_compile_time_value_for_BinOp(T& left_value, T& right_value,
+        T& result_value, ASR::binopType binop_type) {
+        switch (binop_type) {
+            case ASR::binopType::Add: {
+                result_value = left_value + right_value;
+                break;
+            }
+            case ASR::binopType::Mul: {
+                result_value = left_value * right_value;
+                break;
+            }
+            case ASR::binopType::Div: {
+                result_value = left_value / right_value;
+                break;
+            }
+            case ASR::binopType::Sub: {
+                result_value = left_value - right_value;
+                break;
+            }
+            default: {
+                throw std::runtime_error("Evaluation for ASR::binopType::" + std::to_string(binop_type));
+            }
+        }
+    }
+
+    ASR::expr_t* evaluate_compile_time_value_for_BinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
+        ASR::binopType binop_type, const Location& loc, ASR::ttypeType type) {
+        if( ASRUtils::is_array(ASRUtils::expr_type(lhs)) ) {
+            return nullptr;
+        }
+
+        ASR::ttype_t* result_type = ASRUtils::expr_type(lhs);
+
+        #define EVALUATE_COMPILE_TIME_VALUE_FOR_BINOP_CASE(Name, Constructor, Ctype) \
+            case ASR::ttypeType::Name: { \
+                Ctype lhs_value, rhs_value, result_value; \
+                if( !ASRUtils::extract_value(ASRUtils::expr_value(lhs), lhs_value) || \
+                    !ASRUtils::extract_value(ASRUtils::expr_value(rhs), rhs_value)) { \
+                    return nullptr; \
+                } \
+                evaluate_compile_time_value_for_BinOp( \
+                    lhs_value, rhs_value, result_value, binop_type); \
+                return ASRUtils::EXPR(ASR::Constructor(al, loc, result_value, result_type)); \
+            } \
+
+        switch (type) {
+            EVALUATE_COMPILE_TIME_VALUE_FOR_BINOP_CASE(Real, make_RealConstant_t, double);
+            EVALUATE_COMPILE_TIME_VALUE_FOR_BINOP_CASE(Integer, make_IntegerConstant_t, int64_t);
+        }
+
+        return nullptr;
+    }
+
     void CreateBinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
         ASR::binopType binop_type, const Location& loc) {
         cast_helper(lhs, rhs, false);
+        ASR::ttype_t* result_type = ASRUtils::type_get_past_const(
+            ASRUtils::type_get_past_allocatable(
+                ASRUtils::type_get_past_pointer(ASRUtils::expr_type(lhs))));
         ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
         if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
             ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
-                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+                binop_type, rhs, result_type,
+                evaluate_compile_time_value_for_BinOp(
+                    lhs, rhs, binop_type, loc, ASR::ttypeType::Integer));
         } else if( ASRUtils::is_real(*ASRUtils::expr_type(lhs)) &&
                    ASRUtils::is_real(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_RealBinOp_t(al, loc, lhs,
-                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+                binop_type, rhs, result_type,
+                evaluate_compile_time_value_for_BinOp(
+                    lhs, rhs, binop_type, loc, ASR::ttypeType::Real));
         } else if( ASRUtils::is_complex(*ASRUtils::expr_type(lhs)) &&
                    ASRUtils::is_complex(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_ComplexBinOp_t(al, loc, lhs,
-                binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
+                binop_type, rhs, result_type, nullptr);
         } else {
             throw std::runtime_error("Only integer, real and complex types are supported so "
                 "far for binary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(lhs))
@@ -1661,7 +1772,7 @@ public:
             name == "range" || name == "pow" || name == "equal" ||
             name == "operator<" || name == "operator<=" || name == "operator>=" ||
             name == "operator!=" || name == "operator\"\"i" || name == "sin" ||
-            name == "cos" || name == "amin" || name == "operator[]" ) {
+            name == "cos" || name == "amin" || name == "operator[]" || name == "sqrt" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
