@@ -8,8 +8,8 @@ LC is the C and C++ frontend to LCompilers.
     conda activate lc
     ./build.sh
     lc examples/expr2.c
-    lc --ast-dump examples/expr2.c
-    lc --asr-dump examples/expr2.c
+    lc --show-clang-ast examples/expr2.c
+    lc --show-asr examples/expr2.c
     lc --show-llvm examples/expr2.c
 
 # Tests
