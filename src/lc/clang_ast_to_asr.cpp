@@ -579,9 +579,10 @@ public:
     bool TraverseMemberExpr(clang::MemberExpr* x) {
         TraverseStmt(x->getBase());
         ASR::expr_t* base = ASRUtils::EXPR(tmp.get());
+        ASR::ttype_t* base_type = ASRUtils::extract_type(ASRUtils::expr_type(base));
         std::string member_name = x->getMemberDecl()->getNameAsString();
-        if( ASR::is_a<ASR::Struct_t>(*ASRUtils::expr_type(base)) ) {
-            ASR::Struct_t* struct_t = ASR::down_cast<ASR::Struct_t>(ASRUtils::expr_type(base));
+        if( ASR::is_a<ASR::Struct_t>(*base_type) ) {
+            ASR::Struct_t* struct_t = ASR::down_cast<ASR::Struct_t>(base_type);
             ASR::StructType_t* struct_type_t = ASR::down_cast<ASR::StructType_t>(
                    ASRUtils::symbol_get_past_external(struct_t->m_derived_type));
             ASR::symbol_t* member = struct_type_t->m_symtab->resolve_symbol(member_name);
@@ -1325,7 +1326,7 @@ public:
                 struct_type_t->m_symtab->resolve_symbol(struct_type_t->m_members[i]));
             ASR::ttype_t* arg_type = ASRUtils::expr_type(call_arg.m_value);
             if( !ASRUtils::types_equal(orig_type, arg_type, true) ) {
-                throw std::runtime_error(type_name + std::to_string(i) +
+                throw std::runtime_error(type_name + "'s " + std::to_string(i) +
                     "-th constructor argument's type, " + ASRUtils::type_to_str(arg_type) +
                     ", is not compatible with " + std::string(struct_type_t->m_members[i]) +
                     " member's type, " + ASRUtils::type_to_str(orig_type));
@@ -1588,6 +1589,10 @@ public:
         switch (type) {
             EVALUATE_COMPILE_TIME_VALUE_FOR_BINOP_CASE(Real, make_RealConstant_t, double);
             EVALUATE_COMPILE_TIME_VALUE_FOR_BINOP_CASE(Integer, make_IntegerConstant_t, int64_t);
+            default: {
+                throw std::runtime_error(std::string("Compile time evaluation of binary operator for type, ") +
+                    ASRUtils::type_to_str(result_type) + " isn't handled yet.");
+            }
         }
 
         return nullptr;
@@ -1634,13 +1639,45 @@ public:
         }
     }
 
+    ASR::expr_t* evaluate_compile_time_value_for_UnaryMinus(
+        ASR::expr_t* operand, const Location& loc, ASR::ttypeType type) {
+        if( ASRUtils::is_array(ASRUtils::expr_type(operand)) ) {
+            return nullptr;
+        }
+
+        ASR::ttype_t* result_type = ASRUtils::expr_type(operand);
+
+        #define EVALUATE_COMPILE_TIME_VALUE_FOR_UNARYOP_CASE(Name, Constructor, Ctype) \
+            case ASR::ttypeType::Name: { \
+                Ctype operand_value; \
+                if( !ASRUtils::extract_value(ASRUtils::expr_value(operand), operand_value) ) { \
+                    return nullptr; \
+                } \
+                return ASRUtils::EXPR(ASR::Constructor(al, loc, -operand_value, result_type)); \
+            } \
+
+        switch (type) {
+            EVALUATE_COMPILE_TIME_VALUE_FOR_UNARYOP_CASE(Real, make_RealConstant_t, double);
+            EVALUATE_COMPILE_TIME_VALUE_FOR_UNARYOP_CASE(Integer, make_IntegerConstant_t, int64_t);
+            default: {
+                throw std::runtime_error(std::string("Compile time evaluation of unary minus for type, ") +
+                    ASRUtils::type_to_str(result_type) + " isn't handled yet.");
+            }
+        }
+
+        return nullptr;
+    }
+
     void CreateUnaryMinus(ASR::expr_t* op, const Location& loc) {
         if( ASRUtils::is_integer(*ASRUtils::expr_type(op)) ) {
-            tmp = ASR::make_IntegerUnaryMinus_t(al, loc, op,
-                ASRUtils::expr_type(op), nullptr);
+            tmp = ASR::make_IntegerUnaryMinus_t(
+                al, loc, op, ASRUtils::expr_type(op),
+                evaluate_compile_time_value_for_UnaryMinus(
+                op, loc, ASR::ttypeType::Integer));
         } else if( ASRUtils::is_real(*ASRUtils::expr_type(op)) ) {
-            tmp = ASR::make_RealUnaryMinus_t(al, loc, op,
-                ASRUtils::expr_type(op), nullptr);
+            tmp = ASR::make_RealUnaryMinus_t(al, loc, op, ASRUtils::expr_type(op),
+                evaluate_compile_time_value_for_UnaryMinus(
+                op, loc, ASR::ttypeType::Real));
         } else {
             throw std::runtime_error("Only integer and real types are supported so "
                 "far for unary operator, found: " + ASRUtils::type_to_str(ASRUtils::expr_type(op)));
