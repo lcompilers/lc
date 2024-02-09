@@ -503,9 +503,9 @@ namespace LCompilers {
                 get_offset(target, false));
 
             llvm::Value* target_dim_des_array = get_pointer_to_dimension_descriptor_array(target);
-            int j = 0, r = 1;
+            int j = 0, r = 2 * value_rank - 1;
             llvm::Value* stride = llvm::ConstantInt::get(context, llvm::APInt(32, 1));
-            for( int i = 0; i < value_rank; i++ ) {
+            for( int i = value_rank - 1; i >= 0; i-- ) {
                 if( ds[i] != nullptr ) {
                     llvm::Value* dim_length = builder->CreateAdd(
                                                 builder->CreateSDiv(
@@ -524,7 +524,7 @@ namespace LCompilers {
                     j++;
                 }
                 stride = builder->CreateMul(stride, llvm_diminfo[r]);
-                r += 2;
+                r -= 2;
             }
             LCOMPILERS_ASSERT(j == target_rank);
             builder->CreateStore(

@@ -934,6 +934,8 @@ static inline bool is_value_constant(ASR::expr_t *a_value) {
             }
         }
         return is_constant;
+    } else if( ASR::is_a<ASR::Var_t>(*a_value) ) {
+        return ASR::is_a<ASR::Const_t>(*ASRUtils::expr_type(a_value));
     } else {
         return false;
     }
@@ -1810,10 +1812,10 @@ static inline bool is_unsigned_integer(ASR::ttype_t &x) {
 
 static inline bool is_real(ASR::ttype_t &x) {
     return ASR::is_a<ASR::Real_t>(
-        *type_get_past_array(
+        *type_get_past_const(
+            type_get_past_array(
                 type_get_past_allocatable(
-                    type_get_past_pointer(
-                        type_get_past_const(&x)))));
+                    type_get_past_pointer(&x)))));
 }
 
 static inline bool is_character(ASR::ttype_t &x) {
@@ -1979,10 +1981,10 @@ inline int extract_dimensions_from_ttype(ASR::ttype_t *x,
 }
 
 static inline ASR::ttype_t *extract_type(ASR::ttype_t *type) {
-    return type_get_past_array(
-            type_get_past_allocatable(
-                type_get_past_pointer(
-                    type_get_past_const(type))));
+    return type_get_past_const(
+                type_get_past_array(
+                    type_get_past_allocatable(
+                        type_get_past_pointer(type))));
 }
 
 static inline bool is_fixed_size_array(ASR::dimension_t* m_dims, size_t n_dims) {
@@ -2756,8 +2758,12 @@ inline bool types_equal(ASR::ttype_t *a, ASR::ttype_t *b,
     // TODO: If anyone of the input or argument is derived type then
     // add support for checking member wise types and do not compare
     // directly. From stdlib_string len(pattern) error
-    a = ASRUtils::type_get_past_allocatable(ASRUtils::type_get_past_pointer(a));
-    b = ASRUtils::type_get_past_allocatable(ASRUtils::type_get_past_pointer(b));
+    a = ASRUtils::type_get_past_const(
+            ASRUtils::type_get_past_allocatable(
+                ASRUtils::type_get_past_pointer(a)));
+    b = ASRUtils::type_get_past_const(
+            ASRUtils::type_get_past_allocatable(
+                ASRUtils::type_get_past_pointer(b)));
     if( !check_for_dimensions ) {
         a = ASRUtils::type_get_past_array(a);
         b = ASRUtils::type_get_past_array(b);

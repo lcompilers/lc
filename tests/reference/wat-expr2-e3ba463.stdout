@@ -15,11 +15,7 @@
     (global $6 (mut f64) (f64.const 0.000000))
     (func $2 (type 2) (param) (result i32)
         (local i32 i32)
-        i32.const 2
-        i32.const 3
-        i32.add
-        i32.const 5
-        i32.mul
+        i32.const 25
         local.set 1
         local.get 1
         i64.extend_i32_s

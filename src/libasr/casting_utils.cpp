@@ -86,7 +86,8 @@ namespace LCompilers::CastingUtil {
         }
 
         int casted_expr_signal = 2;
-        ASR::ttypeType left_Type = left_type->type, right_Type = right_type->type;
+        ASR::ttypeType left_Type = ASRUtils::extract_type(left_type)->type,
+            right_Type = ASRUtils::extract_type(right_type)->type;
         int left_kind = ASRUtils::extract_kind_from_ttype_t(left_type);
         int right_kind = ASRUtils::extract_kind_from_ttype_t(right_type);
         int left_priority = get_type_priority(left_Type);
