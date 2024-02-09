@@ -6446,7 +6446,8 @@ public:
             this->visit_expr_wrapper(x->m_value, true);
             return;
         }
-        ASR::ttype_t *t2_ = ASRUtils::type_get_past_array(x->m_type);
+        ASR::ttype_t *t2_ = ASRUtils::type_get_past_const(
+            ASRUtils::type_get_past_array(x->m_type));
         switch( t2_->type ) {
             case ASR::ttypeType::Pointer:
             case ASR::ttypeType::Allocatable: {
