@@ -1560,8 +1560,13 @@ public:
                 result_value = left_value - right_value;
                 break;
             }
+            case ASR::binopType::Pow: {
+                result_value = pow(left_value, right_value);
+                break;
+            }
             default: {
-                throw std::runtime_error("Evaluation for ASR::binopType::" + std::to_string(binop_type));
+                throw std::runtime_error("Evaluation for ASR::binopType::" +
+                    std::to_string(binop_type) + " is not supported yet.");
             }
         }
     }
@@ -1572,7 +1577,7 @@ public:
             return nullptr;
         }
 
-        ASR::ttype_t* result_type = ASRUtils::expr_type(lhs);
+        ASR::ttype_t* result_type = ASRUtils::type_get_past_const(ASRUtils::expr_type(lhs));
 
         #define EVALUATE_COMPILE_TIME_VALUE_FOR_BINOP_CASE(Name, Constructor, Ctype) \
             case ASR::ttypeType::Name: { \
