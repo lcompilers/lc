@@ -484,6 +484,9 @@ public:
     bool TraverseCXXRecordDecl(clang::CXXRecordDecl* x) {
         for( auto constructors = x->ctor_begin(); constructors != x->ctor_end(); constructors++ ) {
             clang::CXXConstructorDecl* constructor = *constructors;
+            if( constructor->isTrivial() || constructor->isImplicit() ) {
+                continue ;
+            }
             for( auto ctor = constructor->init_begin(); ctor != constructor->init_end(); ctor++ ) {
                 clang::CXXCtorInitializer* ctor_init = *ctor;
                 clang::Expr* init_expr = ctor_init->getInit();
