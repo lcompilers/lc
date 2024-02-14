@@ -221,3 +221,4 @@ RUN(NAME pointer_03.cpp LABELS gcc llvm NOFAST)
 RUN(NAME function_01.cpp LABELS gcc llvm NOFAST)
 
 RUN(NAME nbody.cpp LABELS gcc llvm NOFAST)
+RUN(NAME nbody_02.cpp LABELS gcc llvm NOFAST)
