@@ -15,10 +15,10 @@ Source: https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbod
 #include "xtensor/xio.hpp"
 #include "xtensor/xview.hpp"
 
-const int nb = 5;
-const double PI = 3.141592653589793;
-const double SOLAR_MASS = 4 * PI * PI;
-const int N = (nb - 1) * nb/2;
+constexpr int nb = 5;
+constexpr double PI = 3.141592653589793;
+constexpr double SOLAR_MASS = 4 * PI * PI;
+constexpr int N = (nb - 1) * nb/2;
 
 void offset_momentum(const int k, xt::xtensor_fixed<double, xt::xshape<3, nb>>& v,
    const xt::xtensor_fixed<double, xt::xshape<nb>>& mass) {
@@ -101,7 +101,7 @@ double energy(const xt::xtensor_fixed<double, xt::xshape<3, nb>>& x,
 struct body {
     double x, y, z, u, vx, vy, vz, vu, mass;
 
-    body(double x_, double y_, double z_, double u_,
+    constexpr body(double x_, double y_, double z_, double u_,
          double vx_, double vy_, double vz_, double vu_,
          double mass_) : x{x_}, y{y_}, z{z_}, u{u_}, vx{vx_},
     vy{vy_}, vz{vz_}, vu{vu_}, mass{mass_} {
@@ -112,16 +112,16 @@ struct body {
 int main() {
 
     const double tstep = 0.01;
-    const double DAYS_PER_YEAR = 365.24;
+    constexpr double DAYS_PER_YEAR = 365.24;
 
-    const struct body jupiter = body(
+    constexpr struct body jupiter = body(
         4.84143144246472090, -1.16032004402742839,
         -1.03622044471123109e-01, 0.0, 1.66007664274403694e-03 * DAYS_PER_YEAR,
         7.69901118419740425e-03 * DAYS_PER_YEAR,
         -6.90460016972063023e-05 * DAYS_PER_YEAR, 0.0,
         9.54791938424326609e-04 * SOLAR_MASS);
 
-    const struct body saturn = body(
+    constexpr struct body saturn = body(
         8.34336671824457987, 4.12479856412430479,
         -4.03523417114321381e-01, 0.0,
         -2.76742510726862411e-03 * DAYS_PER_YEAR,
@@ -129,7 +129,7 @@ int main() {
         2.30417297573763929e-05 * DAYS_PER_YEAR, 0.0,
         2.85885980666130812e-04 * SOLAR_MASS);
 
-    const struct body uranus = body(
+    constexpr struct body uranus = body(
         1.28943695621391310e+01, -1.51111514016986312e+01,
         -2.23307578892655734e-01, 0.0,
         2.96460137564761618e-03 * DAYS_PER_YEAR,
@@ -137,7 +137,7 @@ int main() {
         -2.96589568540237556e-05 * DAYS_PER_YEAR, 0.0,
         4.36624404335156298e-05 * SOLAR_MASS);
 
-    const struct body neptune = body(
+    constexpr struct body neptune = body(
         1.53796971148509165e+01, -2.59193146099879641e+01,
         1.79258772950371181e-01, 0.0,
         2.68067772490389322e-03 * DAYS_PER_YEAR,
@@ -145,7 +145,7 @@ int main() {
         -9.51592254519715870e-05 * DAYS_PER_YEAR, 0.0,
         5.15138902046611451e-05 * SOLAR_MASS);
 
-    const struct body sun = body(0.0, 0.0, 0.0, 0.0, 0.0,
+    constexpr struct body sun = body(0.0, 0.0, 0.0, 0.0, 0.0,
         0.0, 0.0, 0.0, SOLAR_MASS);
 
     xt::xtensor_fixed<double, xt::xshape<nb>> mass = {

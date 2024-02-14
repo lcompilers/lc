@@ -160,6 +160,7 @@ public:
     Vec<ASR::stmt_t*>* default_stmt;
     OneTimeUseBool is_break_stmt_present;
     bool enable_fall_through;
+    std::map<ASR::symbol_t*, std::map<std::string, ASR::expr_t*>> struct2member_inits;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
@@ -481,6 +482,26 @@ public:
     }
 
     bool TraverseCXXRecordDecl(clang::CXXRecordDecl* x) {
+        for( auto constructors = x->ctor_begin(); constructors != x->ctor_end(); constructors++ ) {
+            clang::CXXConstructorDecl* constructor = *constructors;
+            if( constructor->isTrivial() || constructor->isImplicit() ) {
+                continue ;
+            }
+            for( auto ctor = constructor->init_begin(); ctor != constructor->init_end(); ctor++ ) {
+                clang::CXXCtorInitializer* ctor_init = *ctor;
+                clang::Expr* init_expr = ctor_init->getInit();
+                if( init_expr->getStmtClass() == clang::Stmt::StmtClass::InitListExprClass ) {
+                    init_expr = static_cast<clang::InitListExpr*>(init_expr)->getInit(0);
+                }
+                if( init_expr->getStmtClass() != clang::Stmt::StmtClass::ImplicitCastExprClass ||
+                    static_cast<clang::ImplicitCastExpr*>(init_expr)->getSubExpr()->getStmtClass() !=
+                    clang::Stmt::StmtClass::DeclRefExprClass ) {
+                    throw std::runtime_error("Initialisation expression in constructor should "
+                                             "only be the argument itself.");
+                }
+            }
+        }
+
         SymbolTable* parent_scope = current_scope;
         current_scope = al.make_new<SymbolTable>(parent_scope);
         std::string struct_name = x->getNameAsString();
@@ -576,6 +597,20 @@ public:
         return true;
     }
 
+    ASR::expr_t* evaluate_compile_time_value_for_StructInstanceMember(
+        ASR::expr_t* base, const std::string& member_name) {
+        if( ASR::is_a<ASR::Var_t>(*base) ) {
+            ASR::Var_t* var_t = ASR::down_cast<ASR::Var_t>(base);
+            ASR::symbol_t* v = ASRUtils::symbol_get_past_external(var_t->m_v);
+            if( struct2member_inits.find(v) == struct2member_inits.end() ) {
+                return nullptr;
+            }
+            return struct2member_inits[v][member_name];
+        }
+
+        return nullptr;
+    }
+
     bool TraverseMemberExpr(clang::MemberExpr* x) {
         TraverseStmt(x->getBase());
         ASR::expr_t* base = ASRUtils::EXPR(tmp.get());
@@ -596,8 +631,8 @@ public:
                 struct_type_t->m_name, nullptr, 0, s2c(al, member_name),
                 ASR::accessType::Public));
             current_scope->add_symbol(mangled_name, member);
-            tmp = ASR::make_StructInstanceMember_t(al, Lloc(x), base, member,
-                ASRUtils::symbol_type(member), nullptr);
+            tmp = ASR::make_StructInstanceMember_t(al, Lloc(x), base, member, ASRUtils::symbol_type(member),
+                evaluate_compile_time_value_for_StructInstanceMember(base, member_name));
         } else if( special_function_map.find(member_name) != special_function_map.end() ) {
             member_name_obj.set(member_name);
             return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseMemberExpr(x);
@@ -1308,6 +1343,13 @@ public:
     }
 
     bool TraverseCXXTemporaryObjectExpr(clang::CXXTemporaryObjectExpr *x) {
+        if( !x->getConstructor()->isConstexpr() ) {
+            throw std::runtime_error("Constructors for user-define types "
+                                     "must be defined with constexpr.");
+        }
+        if( static_cast<clang::CompoundStmt*>(x->getConstructor()->getBody())->size() > 0 ) {
+            throw std::runtime_error("Constructor for user-defined must have empty body.");
+        }
         std::string type_name = x->getConstructor()->getNameAsString();
         ASR::symbol_t* s = current_scope->resolve_symbol(type_name);
         if( s == nullptr ) {
@@ -1322,6 +1364,11 @@ public:
             ASR::call_arg_t call_arg;
             call_arg.loc = Lloc(x);
             call_arg.m_value = ASRUtils::EXPR(tmp.get());
+            if( !ASRUtils::is_value_constant(ASRUtils::expr_value(call_arg.m_value)) ) {
+                throw std::runtime_error("Constructor for user-defined types "
+                    "must be initialised with constant values, " + std::to_string(i) +
+                    "-th argument is not a constant.");
+            }
             ASR::ttype_t* orig_type = ASRUtils::symbol_type(
                 struct_type_t->m_symtab->resolve_symbol(struct_type_t->m_members[i]));
             ASR::ttype_t* arg_type = ASRUtils::expr_type(call_arg.m_value);
@@ -1336,6 +1383,48 @@ public:
         tmp = ASR::make_StructTypeConstructor_t(al, Lloc(x), s, struct_constructor_args.p,
             struct_constructor_args.size(), ClangTypeToASRType(x->getType()), nullptr);
         return true;
+    }
+
+    void TraverseAPValue(clang::APValue& field) {
+        Location loc;
+        loc.first = 1; loc.last = 1;
+        switch( field.getKind() ) {
+            case clang::APValue::Int: {
+                tmp = ASR::make_IntegerConstant_t(al, loc, field.getInt().getLimitedValue(),
+                    ASRUtils::TYPE(ASR::make_Integer_t(al, loc, field.getInt().getBitWidth()/8)));
+                break;
+            }
+            case clang::APValue::Float: {
+                tmp = ASR::make_RealConstant_t(al, loc, field.getFloat().convertToDouble(),
+                    ASRUtils::TYPE(ASR::make_Real_t(al, loc, 8)));
+                break;
+            }
+            default: {
+                throw std::runtime_error("APValue not supported for clang::APValue::" +
+                                         std::to_string(field.getKind()));
+            }
+        }
+    }
+
+    void evaluate_compile_time_value_for_Var(clang::APValue* ap_value, ASR::symbol_t* v) {
+        switch( ap_value->getKind() ) {
+            case clang::APValue::Struct: {
+                ASR::ttype_t* v_type = ASRUtils::type_get_past_const(ASRUtils::symbol_type(v));
+                if( !ASR::is_a<ASR::Struct_t>(*v_type) ) {
+                    throw std::runtime_error("Expected ASR::Struct_t type found, " +
+                        ASRUtils::type_to_str(v_type));
+                }
+                ASR::Struct_t* struct_t = ASR::down_cast<ASR::Struct_t>(v_type);
+                ASR::StructType_t* struct_type_t = ASR::down_cast<ASR::StructType_t>(
+                    ASRUtils::symbol_get_past_external(struct_t->m_derived_type));
+                for( size_t i = 0; i < ap_value->getStructNumFields(); i++ ) {
+                    clang::APValue& field = ap_value->getStructField(i);
+                    TraverseAPValue(field);
+                    struct2member_inits[v][struct_type_t->m_members[i]] = ASRUtils::EXPR(tmp.get());
+                }
+                break;
+            }
+        }
     }
 
     bool TraverseVarDecl(clang::VarDecl *x) {
@@ -1384,6 +1473,11 @@ public:
                     tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
                     is_stmt_created = true;
                 }
+            }
+
+            if( x->getEvaluatedValue() ) {
+                clang::APValue* ap_value = x->getEvaluatedValue();
+                evaluate_compile_time_value_for_Var(ap_value, v);
             }
         }
         return true;
