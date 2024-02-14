@@ -490,6 +490,9 @@ public:
             for( auto ctor = constructor->init_begin(); ctor != constructor->init_end(); ctor++ ) {
                 clang::CXXCtorInitializer* ctor_init = *ctor;
                 clang::Expr* init_expr = ctor_init->getInit();
+                if( init_expr->isConstantInitializer(*Context, false) ) {
+                    continue;
+                }
                 if( init_expr->getStmtClass() == clang::Stmt::StmtClass::InitListExprClass ) {
                     init_expr = static_cast<clang::InitListExpr*>(init_expr)->getInit(0);
                 }
@@ -1424,6 +1427,9 @@ public:
                 }
                 break;
             }
+            default: {
+                break;
+            }
         }
     }
 
@@ -2188,7 +2194,13 @@ public:
         ASR::expr_t* x_lhs = ASRUtils::EXPR(tmp.get());
         TraverseStmt(x->getRHS());
         ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp.get());
-        CreateBinOp(x_lhs, x_rhs, ASR::binopType::Add, Lloc(x));
+        if( x->getOpcode() == clang::BinaryOperatorKind::BO_AddAssign ) {
+            CreateBinOp(x_lhs, x_rhs, ASR::binopType::Add, Lloc(x));
+        } else if( x->getOpcode() == clang::BinaryOperatorKind::BO_SubAssign ) {
+            CreateBinOp(x_lhs, x_rhs, ASR::binopType::Sub, Lloc(x));
+        } else {
+            throw std::runtime_error(x->getOpcodeStr().str() + " is not yet supported in CompoundAssignOperator.");
+        }
         ASR::expr_t* sum_expr = ASRUtils::EXPR(tmp.get());
         tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, sum_expr, nullptr);
         is_stmt_created = true;
