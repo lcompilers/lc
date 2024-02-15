@@ -14,12 +14,12 @@ endif()
 add_library(lc_lib STATIC ${SRC})
 target_link_libraries(lc_lib asr lc_runtime_static)
 
+target_include_directories(lc_lib BEFORE PUBLIC ${lfortran_SOURCE_DIR}/src)
+target_include_directories(lc_lib BEFORE PUBLIC ${lfortran_BINARY_DIR}/src)
+
 if (WITH_ZLIB)
     target_link_libraries(lc_lib ZLIB::ZLIB)
 endif()
-
-target_include_directories(lc_lib BEFORE PUBLIC ${lfortran_SOURCE_DIR}/src)
-target_include_directories(lc_lib BEFORE PUBLIC ${lfortran_BINARY_DIR}/src)
 if (WITH_XEUS)
     target_link_libraries(lc_lib xeus xeus-zmq)
 endif()
