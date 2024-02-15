@@ -7,6 +7,10 @@ set(SRC
     utils.cpp
 )
 
+if (WITH_WHEREAMI)
+    set(SRC ${SRC} ../bin/tpl/whereami/whereami.cpp)
+endif()
+
 add_library(lc_lib STATIC ${SRC})
 target_link_libraries(lc_lib asr lc_runtime_static)
 
