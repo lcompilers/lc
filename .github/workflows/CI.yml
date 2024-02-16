@@ -65,6 +65,8 @@ jobs:
             lc examples/expr2.c --backend c -o c_o -c
             lc examples/expr2.c --backend llvm -o llvm_o -c
             ls -1
+            cd examples
+            lc expr2.c
 
       - name: Test3 (Linux / macOS)
         shell: bash -l -e {0}
