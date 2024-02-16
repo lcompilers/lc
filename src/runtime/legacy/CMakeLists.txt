@@ -20,3 +20,9 @@ install(TARGETS lc_runtime lc_runtime_static
     ARCHIVE DESTINATION share/lc/lib
     LIBRARY DESTINATION share/lc/lib
 )
+
+# Install the header
+install(
+    FILES ../../../src/libasr/runtime/lfortran_intrinsics.h
+    DESTINATION share/lc/lib/impure
+)

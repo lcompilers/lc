@@ -113,6 +113,9 @@ if (WITH_LLVM)
         ${CLANG_LIBRARIES})
 endif()
 
+set(WITH_WHEREAMI yes
+    CACHE BOOL "Include whereami.cpp")
+
 set(WITH_MACHO no
     CACHE BOOL "Build with mach-o support")
 
@@ -123,6 +126,10 @@ endif()
 if (WITH_MACHO)
     find_package(MACHO REQUIRED)
     set(HAVE_LFORTRAN_MACHO yes)
+endif()
+
+if (WITH_WHEREAMI)
+    add_definitions("-DHAVE_WHEREAMI=1")
 endif()
 
 enable_testing()
