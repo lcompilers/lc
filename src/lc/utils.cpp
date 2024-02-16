@@ -91,13 +91,13 @@ std::string get_runtime_library_c_header_dir()
         || endswith(dirname, "SRC\\BIN")) {
         // Development version
         return dirname + "/../libasr/runtime";
-    } else if (endswith(dirname, "src/lpython/tests") ||
-               endswith(to_lower(dirname), "src\\lpython\\tests")) {
+    } else if (endswith(dirname, "src/lc/tests") ||
+               endswith(to_lower(dirname), "src\\lc\\tests")) {
         // CTest Tests
         return dirname + "/../../libasr/runtime";
     } else {
         // Installed version
-        return dirname + "/../share/lpython/lib/impure";
+        return dirname + "/../share/lc/lib/impure";
     }
 
     return path;
