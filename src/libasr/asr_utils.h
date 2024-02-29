@@ -482,6 +482,9 @@ static inline std::string type_to_str(const ASR::ttype_t *t)
         case ASR::ttypeType::Struct: {
             return ASRUtils::symbol_name(ASR::down_cast<ASR::Struct_t>(t)->m_derived_type);
         }
+        case ASR::ttypeType::Enum: {
+            return ASRUtils::symbol_name(ASR::down_cast<ASR::Enum_t>(t)->m_enum_type);
+        }
         case ASR::ttypeType::Class: {
             return ASRUtils::symbol_name(ASR::down_cast<ASR::Class_t>(t)->m_class_type);
         }
