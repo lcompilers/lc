@@ -504,6 +504,9 @@ public:
                 if( init_expr->getStmtClass() == clang::Stmt::StmtClass::InitListExprClass ) {
                     init_expr = static_cast<clang::InitListExpr*>(init_expr)->getInit(0);
                 }
+                if( init_expr->getStmtClass() == clang::Stmt::StmtClass::CXXConstructExprClass ) {
+                    init_expr = static_cast<clang::CXXConstructExpr*>(init_expr)->getArg(0);
+                }
                 if( init_expr->getStmtClass() != clang::Stmt::StmtClass::ImplicitCastExprClass ||
                     static_cast<clang::ImplicitCastExpr*>(init_expr)->getSubExpr()->getStmtClass() !=
                     clang::Stmt::StmtClass::DeclRefExprClass ) {
