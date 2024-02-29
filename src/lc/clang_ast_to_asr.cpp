@@ -555,13 +555,22 @@ public:
         SymbolTable* parent_scope = current_scope;
         current_scope = al.make_new<SymbolTable>(parent_scope);
         Vec<char*> field_names; field_names.reserve(al, 1);
+        int64_t last_enum_value = 0;
         for( auto enum_const_itr = x->enumerator_begin();
              enum_const_itr != x->enumerator_end(); enum_const_itr++ ) {
             clang::EnumConstantDecl* enum_const = *enum_const_itr;
             std::string enum_const_name = enum_const->getNameAsString();
             field_names.push_back(al, s2c(al, enum_const_name));
-            TraverseStmt(enum_const->getInitExpr());
-            ASR::expr_t* init_expr = ASRUtils::EXPR(tmp.get());
+            ASR::expr_t* init_expr = nullptr;
+            if( enum_const->getInitExpr() ) {
+                TraverseStmt(enum_const->getInitExpr());
+                init_expr = ASRUtils::EXPR(tmp.get());
+                last_enum_value = enum_const->getInitVal().getSExtValue() + 1;
+            } else {
+                init_expr = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, Lloc(x),
+                    last_enum_value, ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
+                last_enum_value += 1;
+            }
             ASR::symbol_t* v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
                 current_scope, s2c(al, enum_const_name), nullptr, 0, ASR::intentType::Local,
                 init_expr, init_expr, ASR::storage_typeType::Default, ASRUtils::expr_type(init_expr),
