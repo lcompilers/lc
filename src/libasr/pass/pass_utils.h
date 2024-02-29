@@ -440,6 +440,9 @@ namespace LCompilers {
                         if( ASR::is_a<ASR::Struct_t>(*type) ) {
                             ASR::Struct_t* struct_t = ASR::down_cast<ASR::Struct_t>(type);
                             vec.push_back(al, ASRUtils::symbol_name(struct_t->m_derived_type));
+                        } else if( ASR::is_a<ASR::Enum_t>(*type) ) {
+                            ASR::Enum_t* enum_t = ASR::down_cast<ASR::Enum_t>(type);
+                            vec.push_back(al, ASRUtils::symbol_name(enum_t->m_enum_type));
                         }
                     }
                     xx.m_dependencies = vec.p;
