@@ -213,6 +213,7 @@ RUN(NAME struct_01.cpp LABELS gcc llvm NOFAST)
 RUN(NAME struct_02.cpp LABELS gcc llvm NOFAST)
 RUN(NAME struct_03.cpp LABELS gcc llvm NOFAST)
 RUN(NAME struct_04.cpp LABELS gcc llvm NOFAST)
+RUN(NAME struct_05.cpp LABELS gcc llvm NOFAST)
 
 RUN(NAME pointer_01.cpp LABELS gcc)
 RUN(NAME pointer_02.cpp LABELS gcc)
