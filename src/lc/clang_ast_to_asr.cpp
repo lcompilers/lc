@@ -472,12 +472,16 @@ public:
             }
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Record ) {
             const clang::CXXRecordDecl* record_type = clang_type->getAsCXXRecordDecl();
-            std::string struct_name = record_type->getNameAsString();
-            ASR::symbol_t* struct_t = current_scope->resolve_symbol(struct_name);
-            if( !struct_t ) {
-                throw std::runtime_error(struct_name + " not defined.");
+            std::string name = record_type->getNameAsString();
+            ASR::symbol_t* type_t = current_scope->resolve_symbol(name);
+            if( !type_t ) {
+                throw std::runtime_error(name + " not defined.");
             }
-            type = ASRUtils::TYPE(ASR::make_Struct_t(al, l, struct_t));
+            if( clang_type->isUnionType() ) {
+                type = ASRUtils::TYPE(ASR::make_Union_t(al, l, type_t));
+            } else {
+                type = ASRUtils::TYPE(ASR::make_Struct_t(al, l, type_t));
+            }
         } else {
             throw std::runtime_error("clang::QualType not yet supported " +
                 std::string(clang_type->getTypeClassName()));
@@ -518,17 +522,24 @@ public:
 
         SymbolTable* parent_scope = current_scope;
         current_scope = al.make_new<SymbolTable>(parent_scope);
-        std::string struct_name = x->getNameAsString();
+        std::string name = x->getNameAsString();
         Vec<char*> field_names; field_names.reserve(al, 1);
         for( auto field = x->field_begin(); field != x->field_end(); field++ ) {
             clang::FieldDecl* field_decl = *field;
             TraverseFieldDecl(field_decl);
             field_names.push_back(al, s2c(al, field_decl->getNameAsString()));
         }
-        ASR::symbol_t* struct_t = ASR::down_cast<ASR::symbol_t>(ASR::make_StructType_t(al, Lloc(x), current_scope,
-            s2c(al, struct_name), nullptr, 0, field_names.p, field_names.size(), ASR::abiType::Source,
-            ASR::accessType::Public, false, x->isAbstract(), nullptr, 0, nullptr, nullptr));
-        parent_scope->add_symbol(struct_name, struct_t);
+        if( x->isUnion() ) {
+            ASR::symbol_t* union_t = ASR::down_cast<ASR::symbol_t>(ASR::make_UnionType_t(al, Lloc(x), current_scope,
+                s2c(al, name), nullptr, 0, field_names.p, field_names.size(), ASR::abiType::Source,
+                ASR::accessType::Public, nullptr, 0, nullptr));
+                parent_scope->add_symbol(name, union_t);
+        } else {
+            ASR::symbol_t* struct_t = ASR::down_cast<ASR::symbol_t>(ASR::make_StructType_t(al, Lloc(x), current_scope,
+                s2c(al, name), nullptr, 0, field_names.p, field_names.size(), ASR::abiType::Source,
+                ASR::accessType::Public, false, x->isAbstract(), nullptr, 0, nullptr, nullptr));
+            parent_scope->add_symbol(name, struct_t);
+        }
         current_scope = parent_scope;
         return true;
     }
@@ -734,6 +745,23 @@ public:
             current_scope->add_symbol(mangled_name, member);
             tmp = ASR::make_StructInstanceMember_t(al, Lloc(x), base, member, ASRUtils::symbol_type(member),
                 evaluate_compile_time_value_for_StructInstanceMember(base, member_name));
+        } else if( ASR::is_a<ASR::Union_t>(*base_type) ) {
+            ASR::Union_t* union_t = ASR::down_cast<ASR::Union_t>(base_type);
+            ASR::UnionType_t* union_type_t = ASR::down_cast<ASR::UnionType_t>(
+                   ASRUtils::symbol_get_past_external(union_t->m_union_type));
+            ASR::symbol_t* member = union_type_t->m_symtab->resolve_symbol(member_name);
+            if( !member ) {
+                throw std::runtime_error(member_name + " not found in the scope of " + union_type_t->m_name);
+            }
+            std::string mangled_name = current_scope->get_unique_name(
+                member_name + "@" + union_type_t->m_name);
+            member = ASR::down_cast<ASR::symbol_t>(ASR::make_ExternalSymbol_t(
+                al, Lloc(x), current_scope, s2c(al, mangled_name), member,
+                union_type_t->m_name, nullptr, 0, s2c(al, member_name),
+                ASR::accessType::Public));
+            current_scope->add_symbol(mangled_name, member);
+            tmp = ASR::make_UnionInstanceMember_t(al, Lloc(x),
+                base, member, ASRUtils::symbol_type(member), nullptr);
         } else if( special_function_map.find(member_name) != special_function_map.end() ) {
             member_name_obj.set(member_name);
             return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseMemberExpr(x);
