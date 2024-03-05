@@ -431,8 +431,9 @@ namespace LCompilers {
                     current_scope = parent_symtab;
                 }
 
-                void visit_StructType(const ASR::StructType_t& x) {
-                    ASR::StructType_t& xx = const_cast<ASR::StructType_t&>(x);
+                template <typename T>
+                void visit_UserDefinedType(const T& x) {
+                    T& xx = const_cast<T&>(x);
                     SetChar vec; vec.reserve(al, 1);
                     for( auto itr: x.m_symtab->get_scope() ) {
                         ASR::ttype_t* type = ASRUtils::extract_type(
@@ -447,6 +448,14 @@ namespace LCompilers {
                     }
                     xx.m_dependencies = vec.p;
                     xx.n_dependencies = vec.size();
+                }
+
+                void visit_StructType(const ASR::StructType_t& x) {
+                    visit_UserDefinedType(x);
+                }
+
+                void visit_UnionType(const ASR::UnionType_t& x) {
+                    visit_UserDefinedType(x);
                 }
         };
 
