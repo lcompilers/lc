@@ -1500,7 +1500,8 @@ public:
         this->visit_expr(*x.m_v);
         ptr_loads = ptr_loads_copy;
         llvm::Value* union_llvm = tmp;
-        ASR::Variable_t* member_var = ASR::down_cast<ASR::Variable_t>(x.m_m);
+        ASR::Variable_t* member_var = ASR::down_cast<ASR::Variable_t>(
+            ASRUtils::symbol_get_past_external(x.m_m));
         ASR::ttype_t* member_type_asr = ASRUtils::get_contained_type(member_var->m_type);
         if( ASR::is_a<ASR::Struct_t>(*member_type_asr) ) {
             ASR::Struct_t* d = ASR::down_cast<ASR::Struct_t>(member_type_asr);

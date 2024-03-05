@@ -703,6 +703,7 @@ public:
             ASR::Module_t *m = ASRUtils::get_sym_module(x.m_external);
             ASR::StructType_t* sm = nullptr;
             ASR::EnumType_t* em = nullptr;
+            ASR::UnionType_t* um = nullptr;
             ASR::Function_t* fm = nullptr;
             bool is_valid_owner = false;
             is_valid_owner = m != nullptr && ((ASR::symbol_t*) m == ASRUtils::get_asr_owner(x.m_external));
@@ -711,13 +712,17 @@ public:
                 ASR::symbol_t* asr_owner_sym = ASRUtils::get_asr_owner(x.m_external);
                 is_valid_owner = (ASR::is_a<ASR::StructType_t>(*asr_owner_sym) ||
                                   ASR::is_a<ASR::EnumType_t>(*asr_owner_sym) ||
-                                  ASR::is_a<ASR::Function_t>(*asr_owner_sym));
+                                  ASR::is_a<ASR::Function_t>(*asr_owner_sym) ||
+                                  ASR::is_a<ASR::UnionType_t>(*asr_owner_sym));
                 if( ASR::is_a<ASR::StructType_t>(*asr_owner_sym) ) {
                     sm = ASR::down_cast<ASR::StructType_t>(asr_owner_sym);
                     asr_owner_name = sm->m_name;
                 } else if( ASR::is_a<ASR::EnumType_t>(*asr_owner_sym) ) {
                     em = ASR::down_cast<ASR::EnumType_t>(asr_owner_sym);
                     asr_owner_name = em->m_name;
+                } else if( ASR::is_a<ASR::UnionType_t>(*asr_owner_sym) ) {
+                    um = ASR::down_cast<ASR::UnionType_t>(asr_owner_sym);
+                    asr_owner_name = um->m_name;
                 } else if( ASR::is_a<ASR::Function_t>(*asr_owner_sym) ) {
                     fm = ASR::down_cast<ASR::Function_t>(asr_owner_sym);
                     asr_owner_name = fm->m_name;
@@ -746,6 +751,8 @@ public:
                 s = em->m_symtab->resolve_symbol(std::string(x.m_original_name));
             } else if( fm ) {
                 s = fm->m_symtab->resolve_symbol(std::string(x.m_original_name));
+            } else if( um ) {
+                s = um->m_symtab->resolve_symbol(std::string(x.m_original_name));
             }
             require(s != nullptr,
                 "ExternalSymbol::m_original_name ('"
