@@ -231,3 +231,4 @@ RUN(NAME enum_03.cpp LABELS gcc llvm NOFAST)
 RUN(NAME enum_04.cpp LABELS gcc llvm NOFAST)
 
 RUN(NAME union_01.cpp LABELS gcc llvm NOFAST)
+RUN(NAME union_02.cpp LABELS gcc llvm NOFAST)
