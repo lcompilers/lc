@@ -173,7 +173,7 @@ public:
         assignment_target{nullptr}, print_args{nullptr},
         is_all_called{false}, is_range_called{false},
         current_switch_case{nullptr}, default_stmt{nullptr},
-        enable_fall_through{false} {}
+        interpret_init_list_expr_as_list{false}, enable_fall_through{false} {}
 
     template <typename T>
     Location Lloc(T *x) {
