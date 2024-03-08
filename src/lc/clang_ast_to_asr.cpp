@@ -38,6 +38,7 @@ enum SpecialFunc {
     Reshape,
     Iota,
     Sqrt,
+    PushBack,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -64,6 +65,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"reshape", SpecialFunc::Reshape},
     {"operator\"\"i", SpecialFunc::Iota},
     {"sqrt", SpecialFunc::Sqrt},
+    {"push_back", SpecialFunc::PushBack},
 };
 
 class OneTimeUseString {
@@ -159,6 +161,7 @@ public:
     Vec<ASR::case_stmt_t*>* current_switch_case;
     Vec<ASR::stmt_t*>* default_stmt;
     OneTimeUseBool is_break_stmt_present;
+    bool interpret_init_list_expr_as_list;
     bool enable_fall_through;
     std::map<ASR::symbol_t*, std::map<std::string, ASR::expr_t*>> struct2member_inits;
     std::map<SymbolTable*, std::vector<ASR::symbol_t*>> scope2enums;
@@ -467,6 +470,15 @@ public:
                 }
                 type = ASRUtils::TYPE(ASR::make_Complex_t(al, l,
                     ASRUtils::extract_kind_from_ttype_t(complex_subtype)));
+            } else if( template_name == "vector" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( template_arguments.size() > 1 ) {
+                    throw std::runtime_error("std::vector accepts only one argument.");
+                }
+
+                const clang::QualType& qual_type = template_arguments.at(0).getAsType();
+                ASR::ttype_t* vector_subtype = ClangTypeToASRType(qual_type, xshape_result);
+                type = ASRUtils::TYPE(ASR::make_List_t(al, l, vector_subtype));
             } else {
                 throw std::runtime_error(std::string("Unrecognized type ") + template_name);
             }
@@ -873,10 +885,19 @@ public:
                     array_indices.p, array_indices.size(),
                     ASRUtils::extract_type(ASRUtils::expr_type(obj)),
                     ASR::arraystorageType::RowMajor, nullptr);
+            } else if(ASR::is_a<ASR::List_t>(*ASRUtils::expr_type(obj))) {
+                if( x->getNumArgs() > 2 ) {
+                    throw std::runtime_error("std::vector needs only one integer for indexing.");
+                }
+
+                TraverseStmt(args[1]);
+                ASR::expr_t* index = ASRUtils::EXPR(tmp.get());
+                tmp = ASR::make_ListItem_t(al, Lloc(x), obj, index,
+                    ASRUtils::get_contained_type(ASRUtils::expr_type(obj)), nullptr);
             } else if( ASR::is_a<ASR::IntrinsicArrayFunction_t>(*obj) ) {
                 tmp = (ASR::asr_t*) obj;
             } else {
-                throw std::runtime_error("Only indexing arrays is supported for now with operator().");
+                throw std::runtime_error("Only indexing arrays is supported for now with " + cxx_operator_name + ".");
             }
         } else if( cxx_operator_name == "operator=" ) {
             if( x->getNumArgs() != 2 ) {
@@ -908,8 +929,17 @@ public:
                     is_stmt_created = true;
                 }
                 assignment_target = nullptr;
+            } else if( ASR::is_a<ASR::List_t>(*ASRUtils::expr_type(obj)) ) {
+                interpret_init_list_expr_as_list = true;
+                TraverseStmt(args[1]);
+                interpret_init_list_expr_as_list = false;
+                if( !is_stmt_created ) {
+                    ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
+                    tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
+                    is_stmt_created = true;
+                }
             } else {
-                throw std::runtime_error("operator= is supported only for arrays.");
+                throw std::runtime_error("operator= is supported only for array, complex and list types.");
             }
         } else if( cxx_operator_name == "operator+" ) {
             generate_code_for_binop(ASR::binopType::Add);
@@ -1286,6 +1316,20 @@ public:
         } else if (sf == SpecialFunc::Iota) {
             tmp = ASR::make_ComplexConstant_t(al, Lloc(x), 0.0, 1.0,
                 ASRUtils::TYPE(ASR::make_Complex_t(al, Lloc(x), 8)));
+        } else if (sf == SpecialFunc::PushBack) {
+            if( args.size() != 1 ) {
+                throw std::runtime_error("std::vector::push_back should be called with only one argument.");
+            }
+
+            if( !ASRUtils::check_equal_type(
+                    ASRUtils::get_contained_type(ASRUtils::expr_type(callee)),
+                    ASRUtils::expr_type(args[0])) ) {
+                throw std::runtime_error(std::string("std::vector::push_back argument must have same type as element ") +
+                    "type of list, found " + ASRUtils::type_to_str(ASRUtils::expr_type(args[0])));
+            }
+
+            tmp = ASR::make_ListAppend_t(al, Lloc(x), callee, args[0]);
+            is_stmt_created = true;
         } else {
             throw std::runtime_error("Only printf and exit special functions supported");
         }
@@ -1430,6 +1474,9 @@ public:
     }
 
     void add_reshape_if_needed(ASR::expr_t*& expr, ASR::expr_t* target_expr) {
+        if( ASR::is_a<ASR::List_t>(*ASRUtils::expr_type(target_expr)) ) {
+            return ;
+        }
         ASR::ttype_t* expr_type = ASRUtils::expr_type(expr);
         ASR::ttype_t* target_expr_type = ASRUtils::expr_type(target_expr);
         ASR::dimension_t *expr_dims = nullptr, *target_expr_dims = nullptr;
@@ -1584,8 +1631,12 @@ public:
         if (x->hasInit()) {
             tmp = nullptr;
             ASR::expr_t* var = ASRUtils::EXPR(ASR::make_Var_t(al, Lloc(x), v));
+            if( ASR::is_a<ASR::List_t>(*asr_type) ) {
+                interpret_init_list_expr_as_list = true;
+            }
             assignment_target = var;
             TraverseStmt(x->getInit());
+            interpret_init_list_expr_as_list = false;
             assignment_target = nullptr;
             if( tmp != nullptr && !is_stmt_created ) {
                 ASR::expr_t* init_val = ASRUtils::EXPR(tmp.get());
@@ -1689,6 +1740,19 @@ public:
     }
 
     bool TraverseInitListExpr(clang::InitListExpr* x) {
+        if( interpret_init_list_expr_as_list ) {
+            Vec<ASR::expr_t*> list_elements;
+            list_elements.reserve(al, x->getNumInits());
+            clang::Expr** clang_inits = x->getInits();
+            for( size_t i = 0; i < x->getNumInits(); i++ ) {
+                TraverseStmt(clang_inits[i]);
+                list_elements.push_back(al, ASRUtils::EXPR(tmp.get()));
+            }
+            ASR::ttype_t* type = ASRUtils::expr_type(list_elements[list_elements.size() - 1]);
+            tmp = ASR::make_ListConstant_t(al, Lloc(x), list_elements.p, list_elements.size(),
+                ASRUtils::TYPE(ASR::make_List_t(al, Lloc(x), type)));
+            return true;
+        }
         Vec<ASR::expr_t*> init_exprs;
         init_exprs.reserve(al, x->getNumInits());
         clang::Expr** clang_inits = x->getInits();
