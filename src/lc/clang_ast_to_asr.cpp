@@ -39,6 +39,7 @@ enum SpecialFunc {
     Iota,
     Sqrt,
     PushBack,
+    Clear,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -66,6 +67,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"operator\"\"i", SpecialFunc::Iota},
     {"sqrt", SpecialFunc::Sqrt},
     {"push_back", SpecialFunc::PushBack},
+    {"clear", SpecialFunc::Clear},
 };
 
 class OneTimeUseString {
@@ -1166,12 +1168,19 @@ public:
             is_stmt_created = true;
         } else if (sf == SpecialFunc::Size) {
             if( args.size() != 0 ) {
-                throw std::runtime_error("xt::xtensor::size should be called with only one argument.");
+                throw std::runtime_error("xt::xtensor::size/std::vector::size should be called with only one argument.");
             }
 
-            tmp = ASR::make_ArraySize_t(al, Lloc(x), callee, nullptr,
-                ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)),
-                nullptr);
+            if( ASRUtils::is_array(ASRUtils::expr_type(callee)) ) {
+                tmp = ASR::make_ArraySize_t(al, Lloc(x), callee, nullptr,
+                    ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)),
+                    nullptr);
+            } else if( ASR::is_a<ASR::List_t>(*ASRUtils::expr_type(callee)) ) {
+                tmp = ASR::make_ListLen_t(al, Lloc(x), callee,
+                    ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)), nullptr);
+            } else {
+                throw std::runtime_error("Only xt::xtensor::size and std::vector::size are supported.");
+            }
         } else if (sf == SpecialFunc::Fill) {
             if( args.size() != 1 ) {
                 throw std::runtime_error("xt::xtensor::fill should be called with only one argument.");
@@ -1332,6 +1341,13 @@ public:
             }
 
             tmp = ASR::make_ListAppend_t(al, Lloc(x), callee, args[0]);
+            is_stmt_created = true;
+        } else if (sf == SpecialFunc::Clear) {
+            if( args.size() > 1 ) {
+                throw std::runtime_error("std::vector::clear should be called with only one argument.");
+            }
+
+            tmp = ASR::make_ListClear_t(al, Lloc(x), callee);
             is_stmt_created = true;
         } else {
             throw std::runtime_error("Only printf and exit special functions supported");
