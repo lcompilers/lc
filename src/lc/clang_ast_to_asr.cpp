@@ -712,6 +712,10 @@ public:
                 asr_cast_kind = ASR::cast_kindType::RealToReal;
                 break;
             }
+            case clang::CastKind::CK_FloatingToIntegral: {
+                asr_cast_kind = ASR::cast_kindType::RealToInteger;
+                break;
+            }
             default: {
                 clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseImplicitCastExpr(x);
                 return true;
@@ -860,8 +864,12 @@ public:
                 for( int i = print_args->size() - 1; i >= 0; i-- ) {
                     print_args_vec.push_back(al, print_args->p[i]);
                 }
+                ASR::expr_t* empty_string = ASRUtils::EXPR(
+                    ASR::make_StringConstant_t(al, Lloc(x), s2c(al, ""),
+                    ASRUtils::TYPE(ASR::make_Character_t(al, Lloc(x), 1, 1, nullptr))
+                ));
                 tmp = ASR::make_Print_t(al, Lloc(x), print_args_vec.p,
-                    print_args_vec.size(), nullptr, nullptr);
+                    print_args_vec.size(), empty_string, empty_string);
                 print_args = nullptr;
                 is_stmt_created = true;
             }
@@ -1837,10 +1845,10 @@ public:
 
     void CreateLogicalOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
         ASR::logicalbinopType binop_type, const Location& loc) {
-        cast_helper(lhs, rhs, false);
+        cast_helper(lhs, rhs, false, true);
         ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
-        if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
-            ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
+        if( ASRUtils::is_logical(*ASRUtils::expr_type(lhs)) &&
+            ASRUtils::is_logical(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_LogicalBinOp_t(al, loc, lhs,
                 binop_type, rhs, ASRUtils::expr_type(lhs), nullptr);
         } else {
@@ -2072,6 +2080,11 @@ public:
                     is_logicalbinop = true;
                     break;
                 }
+                case clang::BO_LOr: {
+                    logicalbinop_type = ASR::logicalbinopType::Or;
+                    is_logicalbinop = true;
+                    break;
+                }
                 default: {
                     throw std::runtime_error("BinaryOperator not supported " + std::to_string(op));
                     break;
@@ -2174,7 +2187,7 @@ public:
         return true;
     }
 
-    void cast_helper(ASR::expr_t*& left, ASR::expr_t*& right, bool is_assign) {
+    void cast_helper(ASR::expr_t*& left, ASR::expr_t*& right, bool is_assign, bool logical_bin_op=false) {
         bool no_cast = ((ASR::is_a<ASR::Pointer_t>(*ASRUtils::expr_type(left)) &&
                         ASR::is_a<ASR::Var_t>(*left)) ||
                         (ASR::is_a<ASR::Pointer_t>(*ASRUtils::expr_type(right)) &&
@@ -2195,7 +2208,7 @@ public:
         // Handle presence of logical types in binary operations
         // by converting them into 32-bit integers.
         // See integration_tests/test_bool_binop.py for its significance.
-        if(!is_assign && ASRUtils::is_logical(*left_type) && ASRUtils::is_logical(*right_type) ) {
+        if(!is_assign && !logical_bin_op && ASRUtils::is_logical(*left_type) && ASRUtils::is_logical(*right_type) ) {
             ASR::ttype_t* dest_type = ASRUtils::TYPE(ASR::make_Integer_t(al, left_type->base.loc, 4));
             ASR::ttype_t* dest_type_left = dest_type;
             if( ASRUtils::is_array(left_type) ) {
@@ -2447,6 +2460,8 @@ public:
             CreateBinOp(x_lhs, x_rhs, ASR::binopType::Add, Lloc(x));
         } else if( x->getOpcode() == clang::BinaryOperatorKind::BO_SubAssign ) {
             CreateBinOp(x_lhs, x_rhs, ASR::binopType::Sub, Lloc(x));
+        } else if( x->getOpcode() == clang::BinaryOperatorKind::BO_MulAssign ) {
+            CreateBinOp(x_lhs, x_rhs, ASR::binopType::Mul, Lloc(x));
         } else {
             throw std::runtime_error(x->getOpcodeStr().str() + " is not yet supported in CompoundAssignOperator.");
         }
@@ -2563,6 +2578,10 @@ public:
         clang::Expr* if_cond = x->getCond();
         TraverseStmt(if_cond);
         ASR::expr_t* test = ASRUtils::EXPR(tmp.get());
+        if( !ASRUtils::is_logical(*ASRUtils::expr_type(test)) ) {
+            test = CastingUtil::perform_casting(test, ASRUtils::expr_type(test),
+                ASRUtils::TYPE(ASR::make_Logical_t(al, Lloc(x), 1)), al, Lloc(x));
+        }
 
         Vec<ASR::stmt_t*> then_body; then_body.reserve(al, 1);
         Vec<ASR::stmt_t*>*current_body_copy = current_body;
