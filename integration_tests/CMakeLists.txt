@@ -237,3 +237,5 @@ RUN(NAME vector_01.cpp LABELS gcc llvm NOFAST)
 RUN(NAME vector_02.cpp LABELS gcc llvm NOFAST)
 
 RUN(NAME loop_01.cpp LABELS gcc llvm NOFAST)
+
+RUN(NAME test_pkg_lnn_01.cpp LABELS gcc llvm NOFAST)
