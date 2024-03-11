@@ -234,3 +234,5 @@ RUN(NAME union_01.cpp LABELS gcc llvm NOFAST)
 RUN(NAME union_02.cpp LABELS gcc llvm NOFAST)
 
 RUN(NAME vector_01.cpp LABELS gcc llvm NOFAST)
+
+RUN(NAME loop_01.cpp LABELS gcc llvm NOFAST)

@@ -165,6 +165,8 @@ public:
     bool enable_fall_through;
     std::map<ASR::symbol_t*, std::map<std::string, ASR::expr_t*>> struct2member_inits;
     std::map<SymbolTable*, std::vector<ASR::symbol_t*>> scope2enums;
+    clang::ForStmt* for_loop;
+    bool inside_loop;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
@@ -173,7 +175,8 @@ public:
         assignment_target{nullptr}, print_args{nullptr},
         is_all_called{false}, is_range_called{false},
         current_switch_case{nullptr}, default_stmt{nullptr},
-        interpret_init_list_expr_as_list{false}, enable_fall_through{false} {}
+        interpret_init_list_expr_as_list{false}, enable_fall_through{false},
+        for_loop{nullptr}, inside_loop{false} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -2290,7 +2293,23 @@ public:
 
     bool TraverseBreakStmt(clang::BreakStmt* x) {
         clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseBreakStmt(x);
+        if( inside_loop ) {
+            tmp = ASR::make_Exit_t(al, Lloc(x), nullptr);
+            is_stmt_created = true;
+        }
         is_break_stmt_present.set(true);
+        return true;
+    }
+
+    bool TraverseContinueStmt(clang::ContinueStmt* x) {
+        if( for_loop != nullptr ) {
+            clang::Stmt* inc_stmt = for_loop->getInc();
+            TraverseStmt(inc_stmt);
+            LCOMPILERS_ASSERT(tmp != nullptr && is_stmt_created);
+            current_body->push_back(al, ASRUtils::STMT(tmp.get()));
+        }
+        tmp = ASR::make_Cycle_t(al, Lloc(x), nullptr);
+        is_stmt_created = true;
         return true;
     }
 
@@ -2437,6 +2456,16 @@ public:
                 is_stmt_created = true;
                 break;
             }
+            case clang::UnaryOperatorKind::UO_PostDec: {
+                ASR::expr_t* decbyone = ASRUtils::EXPR(ASR::make_IntegerBinOp_t(
+                    al, Lloc(x), var, ASR::binopType::Sub,
+                    ASRUtils::EXPR(ASR::make_IntegerConstant_t(
+                        al, Lloc(x), 1, ASRUtils::expr_type(var))),
+                    ASRUtils::expr_type(var), nullptr));
+                tmp = ASR::make_Assignment_t(al, Lloc(x), var, decbyone, nullptr);
+                is_stmt_created = true;
+                break;
+            }
             case clang::UnaryOperatorKind::UO_Minus: {
                 CreateUnaryMinus(var, Lloc(x));
                 break;
@@ -2452,7 +2481,35 @@ public:
         return true;
     }
 
+    bool TraverseWhileStmt(clang::WhileStmt* x) {
+        bool inside_loop_copy = inside_loop;
+        inside_loop = true;
+        std::map<std::string, std::string> alias;
+        scopes.push_back(alias);
+
+        clang::Expr* loop_cond = x->getCond();
+        TraverseStmt(loop_cond);
+        ASR::expr_t* test = ASRUtils::EXPR(tmp.get());
+
+        Vec<ASR::stmt_t*> body; body.reserve(al, 1);
+        Vec<ASR::stmt_t*>*current_body_copy = current_body;
+        current_body = &body;
+        clang::Stmt* loop_body = x->getBody();
+        TraverseStmt(loop_body);
+        current_body = current_body_copy;
+
+        tmp = ASR::make_WhileLoop_t(al, Lloc(x), nullptr, test, body.p, body.size());
+        is_stmt_created = true;
+        scopes.pop_back();
+        inside_loop = inside_loop_copy;
+        return true;
+    }
+
     bool TraverseForStmt(clang::ForStmt* x) {
+        bool inside_loop_copy = inside_loop;
+        inside_loop = true;
+        clang::ForStmt* for_loop_copy = for_loop;
+        for_loop = x;
         std::map<std::string, std::string> alias;
         scopes.push_back(alias);
         clang::Stmt* init_stmt = x->getInit();
@@ -2478,6 +2535,8 @@ public:
         tmp = ASR::make_WhileLoop_t(al, Lloc(x), nullptr, test, body.p, body.size());
         is_stmt_created = true;
         scopes.pop_back();
+        for_loop = for_loop_copy;
+        inside_loop = inside_loop_copy;
         return true;
     }
 
