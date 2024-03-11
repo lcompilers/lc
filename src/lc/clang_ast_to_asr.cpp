@@ -166,6 +166,7 @@ public:
     std::map<ASR::symbol_t*, std::map<std::string, ASR::expr_t*>> struct2member_inits;
     std::map<SymbolTable*, std::vector<ASR::symbol_t*>> scope2enums;
     clang::ForStmt* for_loop;
+    bool inside_loop;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
@@ -175,7 +176,7 @@ public:
         is_all_called{false}, is_range_called{false},
         current_switch_case{nullptr}, default_stmt{nullptr},
         interpret_init_list_expr_as_list{false}, enable_fall_through{false},
-        for_loop{nullptr} {}
+        for_loop{nullptr}, inside_loop{false} {}
 
     template <typename T>
     Location Lloc(T *x) {
@@ -2292,8 +2293,10 @@ public:
 
     bool TraverseBreakStmt(clang::BreakStmt* x) {
         clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseBreakStmt(x);
-        tmp = ASR::make_Exit_t(al, Lloc(x), nullptr);
-        is_stmt_created = true;
+        if( inside_loop ) {
+            tmp = ASR::make_Exit_t(al, Lloc(x), nullptr);
+            is_stmt_created = true;
+        }
         is_break_stmt_present.set(true);
         return true;
     }
@@ -2479,6 +2482,8 @@ public:
     }
 
     bool TraverseWhileStmt(clang::WhileStmt* x) {
+        bool inside_loop_copy = inside_loop;
+        inside_loop = true;
         std::map<std::string, std::string> alias;
         scopes.push_back(alias);
 
@@ -2496,10 +2501,13 @@ public:
         tmp = ASR::make_WhileLoop_t(al, Lloc(x), nullptr, test, body.p, body.size());
         is_stmt_created = true;
         scopes.pop_back();
+        inside_loop = inside_loop_copy;
         return true;
     }
 
     bool TraverseForStmt(clang::ForStmt* x) {
+        bool inside_loop_copy = inside_loop;
+        inside_loop = true;
         clang::ForStmt* for_loop_copy = for_loop;
         for_loop = x;
         std::map<std::string, std::string> alias;
@@ -2528,6 +2536,7 @@ public:
         is_stmt_created = true;
         scopes.pop_back();
         for_loop = for_loop_copy;
+        inside_loop = inside_loop_copy;
         return true;
     }
 
