@@ -1835,7 +1835,7 @@ public:
         } else if( ASRUtils::is_logical(*left_type) && ASRUtils::is_logical(*right_type) ) {
             tmp = ASR::make_LogicalCompare_t(al, loc, lhs, cmpop_type, rhs, result_type, nullptr);
         } else if( ASRUtils::is_complex(*left_type) && ASRUtils::is_complex(*right_type) ) {
-            tmp = ASR::make_ComplexCompare_t(al, loc, lhs, cmpop_type, rhs, left_type, nullptr);
+            tmp = ASR::make_ComplexCompare_t(al, loc, lhs, cmpop_type, rhs, result_type, nullptr);
         } else {
             throw std::runtime_error("Only integer, real and complex types are supported so "
                 "far for comparison operator, found: " + ASRUtils::type_to_str(left_type)
