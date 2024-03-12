@@ -307,13 +307,25 @@
                     (Print
                         [(Var 2 arr1)
                         (Var 2 arr2)]
-                        ()
-                        ()
+                        (StringConstant
+                            ""
+                            (Character 1 1 ())
+                        )
+                        (StringConstant
+                            ""
+                            (Character 1 1 ())
+                        )
                     )
                     (Print
                         [(Var 2 res)]
-                        ()
-                        ()
+                        (StringConstant
+                            ""
+                            (Character 1 1 ())
+                        )
+                        (StringConstant
+                            ""
+                            (Character 1 1 ())
+                        )
                     )
                     (=
                         (Var 2 __return_var)
