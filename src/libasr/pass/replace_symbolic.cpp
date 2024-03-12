@@ -1501,6 +1501,8 @@ public:
                 } else if (ASR::is_a<ASR::Logical_t>(*ASRUtils::expr_type(val))) {
                     ASR::expr_t* function_call = process_attributes(al, x.base.base.loc, val, module_scope);
                     print_tmp.push_back(function_call);
+                } else {
+                    print_tmp.push_back(x.m_values[i]);
                 }
             } else if (ASR::is_a<ASR::Cast_t>(*val)) {
                 ASR::Cast_t* cast_t = ASR::down_cast<ASR::Cast_t>(val);
@@ -1546,6 +1548,8 @@ public:
                     ASR::expr_t* function_call = ASRUtils::EXPR(ASRUtils::make_FunctionCall_t_util(al, x.base.base.loc,
                         sym, sym, call_args.p, call_args.n, ASRUtils::TYPE(ASR::make_Logical_t(al, x.base.base.loc, 4)), nullptr, nullptr));
                     print_tmp.push_back(function_call);
+                } else {
+                    print_tmp.push_back(x.m_values[i]);
                 }
             } else if (ASR::is_a<ASR::ListItem_t>(*val)) {
                 ASR::ListItem_t* list_item = ASR::down_cast<ASR::ListItem_t>(val);
@@ -1564,6 +1568,8 @@ public:
                         basic_str_sym, basic_str_sym, call_args.p, call_args.n,
                         ASRUtils::TYPE(ASR::make_Character_t(al, x.base.base.loc, 1, -2, nullptr)), nullptr, nullptr));
                     print_tmp.push_back(function_call);
+                } else {
+                    print_tmp.push_back(x.m_values[i]);
                 }
             } else {
                 print_tmp.push_back(x.m_values[i]);
