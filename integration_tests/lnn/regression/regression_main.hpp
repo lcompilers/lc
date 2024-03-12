@@ -104,7 +104,7 @@ void print_perceptron(struct Perceptron& p) {
     for( i = 0; i < p.no_of_inputs; i++ ) {
         std::cout << p.weights[i] << ", ";
     }
-    std::cout << p.weights[p.no_of_inputs] << "\n";
+    std::cout << p.weights[p.no_of_inputs] << "(bias)]\n";
     std::cout << "learn_rate = ";
     std::cout << p.learn_rate << "\n";
     std::cout << "error = ";
