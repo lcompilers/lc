@@ -2748,17 +2748,24 @@ clang::tooling::FrontendActionFactory* newFrontendActionLCompilersFactory(Alloca
 
 namespace LC {
 
-static llvm::Expected<clang::tooling::CommonOptionsParser> get_parser(std::string infile) {
+static llvm::Expected<clang::tooling::CommonOptionsParser> get_parser(std::string infile, bool parse_all_comments) {
     static llvm::cl::OptionCategory ClangCheckCategory("clang-check options");
     static const llvm::opt::OptTable &Options = clang::driver::getDriverOptTable();
-    int clang_argc = 3;
-    const char *clang_argv[] = {"lc", infile.c_str(), "--"};
-    return clang::tooling::CommonOptionsParser::create(clang_argc, clang_argv, ClangCheckCategory);
+    if( parse_all_comments ) {
+        int clang_argc = 4;
+        const char *clang_argv[] = {"lc", infile.c_str(), "--extra-arg=-fparse-all-comments", "--"};
+        return clang::tooling::CommonOptionsParser::create(clang_argc, clang_argv, ClangCheckCategory);
+    } else {
+        int clang_argc = 3;
+        const char *clang_argv[] = {"lc", infile.c_str(), "--"};
+        return clang::tooling::CommonOptionsParser::create(clang_argc, clang_argv, ClangCheckCategory);
+    }
 }
 
 int dump_clang_ast(std::string infile, std::string ast_dump_file,
-    std::string ast_dump_filter, bool ast_list, bool ast_print, bool show_clang_ast) {
-    auto ExpectedParser = get_parser(infile);
+    std::string ast_dump_filter, bool ast_list, bool ast_print,
+    bool show_clang_ast, bool parse_all_comments) {
+    auto ExpectedParser = get_parser(infile, parse_all_comments);
     if (!ExpectedParser) {
         llvm::errs() << ExpectedParser.takeError();
         return 1;
@@ -2772,8 +2779,8 @@ int dump_clang_ast(std::string infile, std::string ast_dump_file,
     return Tool.run(clang::tooling::newFrontendActionFactory(&CheckFactory).get());
 }
 
-int clang_ast_to_asr(Allocator &al, std::string infile, ASR::asr_t*& tu) {
-    auto ExpectedParser = get_parser(infile);
+int clang_ast_to_asr(Allocator &al, std::string infile, ASR::asr_t*& tu, bool parse_all_comments) {
+    auto ExpectedParser = get_parser(infile, parse_all_comments);
     if (!ExpectedParser) {
         llvm::errs() << ExpectedParser.takeError();
         return 1;
