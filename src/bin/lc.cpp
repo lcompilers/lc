@@ -63,7 +63,6 @@ std::string construct_outfile(std::string &arg_file, std::string &ArgO) {
 }
 
 #define DeclareLCompilersUtilVars \
-    LCompilers::CompilerOptions compiler_options; \
     LCompilers::diag::Diagnostics diagnostics; \
     LCompilers::LocationManager lm; \
     { \
@@ -74,12 +73,9 @@ std::string construct_outfile(std::string &arg_file, std::string &ArgO) {
         lm.init_simple(input); \
         lm.file_ends.push_back(input.size()); \
     } \
-    compiler_options.po.always_run = true; \
-    compiler_options.po.run_fun = "f"; \
-    compiler_options.po.realloc_lhs = true; \
     diagnostics.diagnostics.clear(); \
 
-int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t *asr) {
+int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t *asr, LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     LCompilers::Result<LCompilers::Vec<uint8_t>> r2 = LCompilers::asr_to_wasm_bytes_stream(*asr, al, diagnostics, compiler_options);
@@ -100,7 +96,7 @@ int emit_wat(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUni
     return 0;
 }
 
-int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr, LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     // Apply ASR passes
@@ -118,7 +114,7 @@ int emit_c(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_
     return 0;
 }
 
-int emit_cpp(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+int emit_cpp(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr, LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     // Apply ASR passes
@@ -136,7 +132,7 @@ int emit_cpp(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUni
     return 0;
 }
 
-int emit_fortran(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+int emit_fortran(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr, LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     auto res = LCompilers::asr_to_fortran(*asr, diagnostics, false, 4);
@@ -149,7 +145,7 @@ int emit_fortran(Allocator &al, std::string &infile, LCompilers::ASR::Translatio
     return 0;
 }
 
-int emit_llvm(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr) {
+int emit_llvm(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUnit_t* asr, LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     LCompilers::PassManager pass_manager;
@@ -180,7 +176,8 @@ int emit_llvm(Allocator &al, std::string &infile, LCompilers::ASR::TranslationUn
 
 int compile_to_binary_wasm(
     Allocator &al, const std::string &infile,
-    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr,
+    LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
     LCompilers::Result<int> res = LCompilers::asr_to_wasm(*asr, al,  outfile, false, diagnostics, compiler_options);
     if (!res.ok) {
@@ -191,7 +188,8 @@ int compile_to_binary_wasm(
 }
 
 int compile_to_c(Allocator &al, const std::string &infile,
-    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr,
+    LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     // Apply ASR passes
@@ -213,7 +211,8 @@ int compile_to_c(Allocator &al, const std::string &infile,
 }
 
 int compile_to_cpp(Allocator &al, const std::string &infile,
-    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr,
+    LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     // Apply ASR passes
@@ -235,7 +234,8 @@ int compile_to_cpp(Allocator &al, const std::string &infile,
 }
 
 int compile_to_fortran(Allocator &al, const std::string &infile,
-    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr,
+    LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     auto res = LCompilers::asr_to_fortran(*asr, diagnostics, false, 4);
@@ -252,7 +252,8 @@ int compile_to_fortran(Allocator &al, const std::string &infile,
 }
 
 int compile_to_binary_object(Allocator &al, const std::string &infile,
-    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr) {
+    const std::string &outfile, LCompilers::ASR::TranslationUnit_t* asr,
+    LCompilers::CompilerOptions& compiler_options) {
     DeclareLCompilersUtilVars;
 
     LCompilers::PassManager pass_manager;
@@ -616,6 +617,9 @@ int mainApp(int argc, const char **argv) {
     bool parse_all_comments = false;
 
     LCompilers::CompilerOptions co;
+    co.po.always_run = true;
+    co.po.run_fun = "f";
+    co.po.realloc_lhs = true;
     co.po.runtime_library_dir = LCompilers::LC::get_runtime_library_dir();
 
     CLI::App app{"LFortran: modern interactive LLVM-based Fortran compiler"};
@@ -640,6 +644,7 @@ int mainApp(int argc, const char **argv) {
     app.add_flag("--get-rtl-header-dir", print_rtl_header_dir, "Print the path to the runtime library header file");
     app.add_flag("--get-rtl-dir", print_rtl_dir, "Print the path to the runtime library file");
     app.add_flag("--parse-all-comments", parse_all_comments, "Parse all comments in the input code");
+    app.add_flag("--fast", co.po.fast, "Best performance (disable strict standard compliance)");
 
     app.get_formatter()->column_width(25);
     app.require_subcommand(0, 1);
@@ -678,15 +683,15 @@ int mainApp(int argc, const char **argv) {
         std::cout<< LCompilers::pickle(*tu, co.use_colors, co.indent, true) << std::endl;
         return 0;
     } else if (show_wat) {
-        return emit_wat(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+        return emit_wat(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     } else if (show_c) {
-        return emit_c(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+        return emit_c(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     } else if (show_cpp) {
-        return emit_cpp(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+        return emit_cpp(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     } else if (show_fortran) {
-        return emit_fortran(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+        return emit_fortran(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     } else if (show_llvm) {
-        return emit_llvm(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu);
+        return emit_llvm(al, infile, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     }
 
     // compile to binary
@@ -699,19 +704,19 @@ int mainApp(int argc, const char **argv) {
 
     std::string tmp_file;
     if (backend == Backend::wasm) {
-        status = compile_to_binary_wasm(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu);
+        status = compile_to_binary_wasm(al, infile, outfile, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     } else if (backend == Backend::c) {
         tmp_file = outfile + "__generated__.c";
-        status = compile_to_c(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
+        status = compile_to_c(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     } else if (backend == Backend::cpp) {
         tmp_file = outfile + "__generated__.cpp";
-        status = compile_to_cpp(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
+        status = compile_to_cpp(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     } else if (backend == Backend::fortran) {
         tmp_file = outfile + "__generated__.f90";
-        status = compile_to_fortran(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
+        status = compile_to_fortran(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     } else if (backend == Backend::llvm) {
         tmp_file = arg_c ? outfile : (outfile + "__generated__.o");
-        status = compile_to_binary_object(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu);
+        status = compile_to_binary_object(al, infile, tmp_file, (LCompilers::ASR::TranslationUnit_t*)tu, co);
     }
 
     if (status != 0) {
