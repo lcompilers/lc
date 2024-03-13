@@ -613,6 +613,7 @@ int mainApp(int argc, const char **argv) {
     std::string arg_backend = "";
     bool print_rtl_header_dir = false;
     bool print_rtl_dir = false;
+    bool parse_all_comments = false;
 
     LCompilers::CompilerOptions co;
     co.po.runtime_library_dir = LCompilers::LC::get_runtime_library_dir();
@@ -638,6 +639,7 @@ int mainApp(int argc, const char **argv) {
     app.add_option("--backend", arg_backend, "Select a backend (llvm, c, cpp, x86, wasm, fortran)")->capture_default_str();
     app.add_flag("--get-rtl-header-dir", print_rtl_header_dir, "Print the path to the runtime library header file");
     app.add_flag("--get-rtl-dir", print_rtl_dir, "Print the path to the runtime library file");
+    app.add_flag("--parse-all-comments", parse_all_comments, "Parse all comments in the input code");
 
     app.get_formatter()->column_width(25);
     app.require_subcommand(0, 1);
@@ -661,13 +663,13 @@ int mainApp(int argc, const char **argv) {
     // Handle Clang related options in the following
     if (show_clang_ast || ast_list || ast_print) {
         return LCompilers::LC::dump_clang_ast(infile, ast_dump_file,
-            ast_dump_filter, ast_list, ast_print, show_clang_ast);
+            ast_dump_filter, ast_list, ast_print, show_clang_ast, parse_all_comments);
     }
 
     // Handle LC related options
     Allocator al(4*1024);
     LCompilers::ASR::asr_t* tu = nullptr;
-    int status = LCompilers::LC::clang_ast_to_asr(al, infile, tu);
+    int status = LCompilers::LC::clang_ast_to_asr(al, infile, tu, parse_all_comments);
     if (status != 0) {
         return status;
     }
