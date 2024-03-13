@@ -52,6 +52,9 @@ jobs:
         run: |
             export CPATH=$CONDA_PREFIX/include:$CPATH
             lc --show-clang-ast tests/test.cpp
+            lc --show-clang-ast --parse-all-comments tests/parse_comments_01.cpp > parse_comments_01.stdout
+            grep "TextComment" parse_comments_01.stdout
+            rm parse_comments_01.stdout
             lc examples/expr2.c --show-asr
             ./run_tests.py
 
