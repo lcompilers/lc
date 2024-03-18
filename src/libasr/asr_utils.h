@@ -2482,6 +2482,11 @@ static inline ASR::ttype_t* duplicate_type_without_dims(Allocator& al, const ASR
             ASR::TypeParameter_t* tp = ASR::down_cast<ASR::TypeParameter_t>(t);
             return ASRUtils::TYPE(ASR::make_TypeParameter_t(al, loc, tp->m_param));
         }
+        case ASR::ttypeType::Const: {
+            ASR::Const_t* c = ASR::down_cast<ASR::Const_t>(t);
+            return ASRUtils::TYPE(ASR::make_Const_t(al, loc,
+                        duplicate_type_without_dims(al, c->m_type, loc)));
+        }
         default : throw LCompilersException("Not implemented " + std::to_string(t->type));
     }
 }

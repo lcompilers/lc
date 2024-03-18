@@ -146,6 +146,14 @@ namespace LCompilers::CastingUtil {
         } else {
             dest = ASRUtils::extract_type(dest);
         }
+        if (ASR::is_a<ASR::ArrayConstant_t>(*expr)) {
+            ASR::ArrayConstant_t* arr = ASR::down_cast<ASR::ArrayConstant_t>(expr);
+            for (size_t i = 0; i < arr->n_args; i++) {
+                arr->m_args[i] = ASRUtils::expr_value(ASRUtils::EXPR(ASRUtils::make_Cast_t_value(al, loc, arr->m_args[i],
+                                                    cast_kind, ASRUtils::expr_type(arr->m_args[i]))));
+            }
+            return ASRUtils::EXPR((ASR::asr_t*) arr);
+        }
         return ASRUtils::EXPR(ASRUtils::make_Cast_t_value(al, loc, expr, cast_kind, dest));
     }
 }
