@@ -208,6 +208,10 @@ RUN(NAME array_22.cpp LABELS gcc llvm)
 RUN(NAME array_23.cpp LABELS gcc llvm)
 RUN(NAME array_24.cpp LABELS gcc llvm)
 RUN(NAME array_25.cpp LABELS gcc llvm)
+RUN(NAME array_26.cpp LABELS gcc llvm)
+RUN(NAME array_27.cpp LABELS gcc)
+RUN(NAME array_28.cpp LABELS gcc)
+
 
 RUN(NAME struct_01.cpp LABELS gcc llvm)
 RUN(NAME struct_02.cpp LABELS gcc llvm)
