@@ -1,0 +1,254 @@
+(TranslationUnit
+    (SymbolTable
+        1
+        {
+            main:
+                (Function
+                    (SymbolTable
+                        2
+                        {
+                            __return_var:
+                                (Variable
+                                    2
+                                    __return_var
+                                    []
+                                    ReturnVar
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                ),
+                            x:
+                                (Variable
+                                    2
+                                    x
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Allocatable
+                                        (Array
+                                            (Real 8)
+                                            [(()
+                                            ())]
+                                            DescriptorArray
+                                        )
+                                    )
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                )
+                        })
+                    main
+                    (FunctionType
+                        []
+                        (Integer 4)
+                        Source
+                        Implementation
+                        ()
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        .false.
+                        []
+                        .false.
+                    )
+                    []
+                    []
+                    [(Allocate
+                        [((Var 2 x)
+                        [((IntegerConstant 0 (Integer 4))
+                        (IntegerConstant 2 (Integer 4)))]
+                        ()
+                        ())]
+                        ()
+                        ()
+                        ()
+                    )
+                    (Allocate
+                        [((Var 2 x)
+                        [((IntegerConstant 0 (Integer 4))
+                        (IntegerConstant 2 (Integer 4)))]
+                        ()
+                        ())]
+                        ()
+                        ()
+                        ()
+                    )
+                    (=
+                        (Var 2 x)
+                        (ArrayConstant
+                            [(RealConstant
+                                9.000000
+                                (Const
+                                    (Real 8)
+                                )
+                            )
+                            (RealConstant
+                                2.100000
+                                (Const
+                                    (Real 8)
+                                )
+                            )]
+                            (Array
+                                (Const
+                                    (Real 8)
+                                )
+                                [((IntegerConstant 0 (Integer 4))
+                                (IntegerConstant 2 (Integer 4)))]
+                                FixedSizeArray
+                            )
+                            RowMajor
+                        )
+                        ()
+                    )
+                    (Print
+                        [(Var 2 x)]
+                        (StringConstant
+                            ""
+                            (Character 1 1 ())
+                        )
+                        (StringConstant
+                            ""
+                            (Character 1 1 ())
+                        )
+                    )
+                    (If
+                        (RealCompare
+                            (IntrinsicScalarFunction
+                                Abs
+                                [(RealBinOp
+                                    (Cast
+                                        (ArrayItem
+                                            (Var 2 x)
+                                            [(()
+                                            (IntegerConstant 0 (Integer 4))
+                                            ())]
+                                            (Real 8)
+                                            RowMajor
+                                            ()
+                                        )
+                                        RealToReal
+                                        (Real 8)
+                                        ()
+                                    )
+                                    Sub
+                                    (RealConstant
+                                        9.000000
+                                        (Real 8)
+                                    )
+                                    (Real 8)
+                                    ()
+                                )]
+                                0
+                                (Real 8)
+                                ()
+                            )
+                            Gt
+                            (RealConstant
+                                0.000000
+                                (Real 8)
+                            )
+                            (Logical 4)
+                            ()
+                        )
+                        []
+                        []
+                    )
+                    (If
+                        (RealCompare
+                            (IntrinsicScalarFunction
+                                Abs
+                                [(RealBinOp
+                                    (Cast
+                                        (ArrayItem
+                                            (Var 2 x)
+                                            [(()
+                                            (IntegerConstant 1 (Integer 4))
+                                            ())]
+                                            (Real 8)
+                                            RowMajor
+                                            ()
+                                        )
+                                        RealToReal
+                                        (Real 8)
+                                        ()
+                                    )
+                                    Sub
+                                    (RealConstant
+                                        2.100000
+                                        (Real 8)
+                                    )
+                                    (Real 8)
+                                    ()
+                                )]
+                                0
+                                (Real 8)
+                                ()
+                            )
+                            Gt
+                            (RealConstant
+                                0.000000
+                                (Real 8)
+                            )
+                            (Logical 4)
+                            ()
+                        )
+                        []
+                        []
+                    )]
+                    (Var 2 __return_var)
+                    Public
+                    .false.
+                    .false.
+                    ()
+                ),
+            main_program:
+                (Program
+                    (SymbolTable
+                        3
+                        {
+                            exit_code:
+                                (Variable
+                                    3
+                                    exit_code
+                                    []
+                                    Local
+                                    ()
+                                    ()
+                                    Default
+                                    (Integer 4)
+                                    ()
+                                    Source
+                                    Public
+                                    Required
+                                    .false.
+                                )
+                        })
+                    main_program
+                    [main]
+                    [(=
+                        (Var 3 exit_code)
+                        (FunctionCall
+                            1 main
+                            1 main
+                            []
+                            (Integer 4)
+                            ()
+                            ()
+                        )
+                        ()
+                    )]
+                )
+        })
+    []
+)
