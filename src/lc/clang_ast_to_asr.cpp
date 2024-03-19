@@ -40,6 +40,7 @@ enum SpecialFunc {
     Sqrt,
     PushBack,
     Clear,
+    Data,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -68,6 +69,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"sqrt", SpecialFunc::Sqrt},
     {"push_back", SpecialFunc::PushBack},
     {"clear", SpecialFunc::Clear},
+    {"data", SpecialFunc::Data},
 };
 
 class OneTimeUseString {
@@ -141,6 +143,11 @@ class OneTimeUseASRNode {
             return node == other;
         }
 
+};
+
+enum ThirdPartyCPPArrayTypes {
+    XTensorArray,
+    MDSpanArray,
 };
 
 class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
@@ -329,7 +336,9 @@ public:
     }
 
     ASR::ttype_t* ClangTypeToASRType(const clang::QualType& qual_type,
-        Vec<ASR::dimension_t>* xshape_result=nullptr) {
+        Vec<ASR::dimension_t>* xshape_result=nullptr,
+        ThirdPartyCPPArrayTypes* array_type=nullptr,
+        bool* is_third_party_cpp_array=nullptr) {
         const clang::SplitQualType& split_qual_type = qual_type.split();
         const clang::Type* clang_type = split_qual_type.asPair().first;
         const clang::Qualifiers qualifiers = split_qual_type.asPair().second;
@@ -392,11 +401,11 @@ public:
         } else if( clang_type->getTypeClass() == clang::Type::LValueReference ) {
             const clang::LValueReferenceType* lvalue_reference_type = clang_type->getAs<clang::LValueReferenceType>();
             clang::QualType pointee_type = lvalue_reference_type->getPointeeType();
-            type = ClangTypeToASRType(pointee_type, xshape_result);
+            type = ClangTypeToASRType(pointee_type, xshape_result, array_type, is_third_party_cpp_array);
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Elaborated ) {
             const clang::ElaboratedType* elaborated_type = clang_type->getAs<clang::ElaboratedType>();
             clang::QualType desugared_type = elaborated_type->desugar();
-            type = ClangTypeToASRType(desugared_type, xshape_result);
+            type = ClangTypeToASRType(desugared_type, xshape_result, array_type, is_third_party_cpp_array);
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::TemplateSpecialization ) {
             const clang::TemplateSpecializationType* template_specialization = clang_type->getAs<clang::TemplateSpecializationType>();
             std::string template_name = template_specialization->getTemplateName().getAsTemplateDecl()->getNameAsString();
@@ -421,9 +430,32 @@ public:
                     empty_dim.m_length = nullptr;
                     empty_dims.push_back(al, empty_dim);
                 }
+                if( array_type && is_third_party_cpp_array ) {
+                    *is_third_party_cpp_array = true;
+                    *array_type = ThirdPartyCPPArrayTypes::XTensorArray;
+                }
                 type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
                     ClangTypeToASRType(qual_type),
                     empty_dims.p, empty_dims.size(),
+                    ASR::array_physical_typeType::DescriptorArray));
+                type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, l, type));
+            } else if( template_name == "mdspan" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( template_arguments.size() != 2 ) {
+                    throw std::runtime_error("mdspan type must be initialised with element type, index type and rank.");
+                }
+                const clang::QualType& qual_type = template_arguments.at(0).getAsType();
+                const clang::QualType& shape_type = template_arguments.at(1).getAsType();
+                Vec<ASR::dimension_t> xtensor_fixed_dims; xtensor_fixed_dims.reserve(al, 1);
+                ClangTypeToASRType(shape_type, &xtensor_fixed_dims, array_type, is_third_party_cpp_array);
+                // Only allocatables are made for Kokkos::mdspan
+                if( array_type && is_third_party_cpp_array ) {
+                    *is_third_party_cpp_array = true;
+                    *array_type = ThirdPartyCPPArrayTypes::MDSpanArray;
+                }
+                type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
+                    ClangTypeToASRType(qual_type),
+                    xtensor_fixed_dims.p, xtensor_fixed_dims.size(),
                     ASR::array_physical_typeType::DescriptorArray));
                 type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, l, type));
             } else if( template_name == "xtensor_fixed" ) {
@@ -434,7 +466,7 @@ public:
                 const clang::QualType& qual_type = template_arguments.at(0).getAsType();
                 const clang::QualType& shape_type = template_arguments.at(1).getAsType();
                 Vec<ASR::dimension_t> xtensor_fixed_dims; xtensor_fixed_dims.reserve(al, 1);
-                ClangTypeToASRType(shape_type, &xtensor_fixed_dims);
+                ClangTypeToASRType(shape_type, &xtensor_fixed_dims, array_type, is_third_party_cpp_array);
                 type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
                     ClangTypeToASRType(qual_type),
                     xtensor_fixed_dims.p, xtensor_fixed_dims.size(),
@@ -461,6 +493,32 @@ public:
                     xshape_result->push_back(al, dim);
                 }
                 return nullptr;
+            } else if( template_name == "dextents" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( xshape_result == nullptr ) {
+                    throw std::runtime_error("Result Vec<ASR::dimention_t>* not provided.");
+                }
+
+                ASR::expr_t* zero = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
+                    ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+                const clang::QualType& index_type = template_arguments.at(0).getAsType();
+                if( !ASR::is_a<ASR::Integer_t>(*ClangTypeToASRType(index_type)) ||
+                    ASRUtils::extract_kind_from_ttype_t(ClangTypeToASRType(index_type)) != 4 ) {
+                    throw std::runtime_error("Only int32_t should be used for index type in Kokkos::dextents.");
+                }
+                clang::Expr* clang_rank = template_arguments.at(1).getAsExpr();
+                TraverseStmt(clang_rank);
+                int rank = 0;
+                if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp.get()), rank) ) {
+                    throw std::runtime_error("Rank provided in the Kokkos::dextents must be a constant.");
+                }
+                for( int i = 0; i < rank; i++ ) {
+                    ASR::dimension_t dim; dim.loc = l;
+                    dim.m_length = nullptr;
+                    dim.m_start = zero;
+                    xshape_result->push_back(al, dim);
+                }
+                return nullptr;
             } else if( template_name == "complex" ) {
                 const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
                 if( template_arguments.size() > 1 ) {
@@ -468,7 +526,8 @@ public:
                 }
 
                 const clang::QualType& qual_type = template_arguments.at(0).getAsType();
-                ASR::ttype_t* complex_subtype = ClangTypeToASRType(qual_type, xshape_result);
+                ASR::ttype_t* complex_subtype = ClangTypeToASRType(qual_type, xshape_result,
+                    array_type, is_third_party_cpp_array);
                 if( !ASRUtils::is_real(*complex_subtype) ) {
                     throw std::runtime_error(std::string("std::complex accepts only real types, found: ") +
                         ASRUtils::type_to_str(complex_subtype));
@@ -482,7 +541,8 @@ public:
                 }
 
                 const clang::QualType& qual_type = template_arguments.at(0).getAsType();
-                ASR::ttype_t* vector_subtype = ClangTypeToASRType(qual_type, xshape_result);
+                ASR::ttype_t* vector_subtype = ClangTypeToASRType(qual_type, xshape_result,
+                    array_type, is_third_party_cpp_array);
                 type = ASRUtils::TYPE(ASR::make_List_t(al, l, vector_subtype));
             } else {
                 throw std::runtime_error(std::string("Unrecognized type ") + template_name);
@@ -490,6 +550,9 @@ public:
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Record ) {
             const clang::CXXRecordDecl* record_type = clang_type->getAsCXXRecordDecl();
             std::string name = record_type->getNameAsString();
+            if( name == "xtensor_container" || name == "vector" ) {
+                return nullptr;
+            }
             ASR::symbol_t* type_t = current_scope->resolve_symbol(name);
             if( !type_t ) {
                 throw std::runtime_error(name + " not defined.");
@@ -787,7 +850,7 @@ public:
             member_name_obj.set(member_name);
             return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseMemberExpr(x);
         } else {
-            throw std::runtime_error("clang::MemberExpr only supported for struct and special functions.");
+            throw std::runtime_error("clang::MemberExpr only supported for struct, union and special functions.");
         }
         return true;
     }
@@ -1357,6 +1420,20 @@ public:
 
             tmp = ASR::make_ListClear_t(al, Lloc(x), callee);
             is_stmt_created = true;
+        } else if (sf == SpecialFunc::Data) {
+            if( args.size() > 0 ) {
+                throw std::runtime_error("std::vector::data should be called with only one argument.");
+            }
+
+            Vec<ASR::dimension_t> dims; dims.reserve(al, 1);
+            ASR::dimension_t dim;
+            dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(
+                al, Lloc(x), 0, ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
+            dim.m_length = nullptr;
+            dims.push_back(al, dim);
+            tmp = ASRUtils::make_Cast_t_value(al, Lloc(x), callee, ASR::cast_kindType::ListToArray,
+                ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x), ASRUtils::get_contained_type(ASRUtils::expr_type(callee)),
+                dims.p, dims.size(), ASR::array_physical_typeType::UnboundedPointerToDataArray)));
         } else {
             throw std::runtime_error("Only printf and exit special functions supported");
         }
@@ -1493,7 +1570,60 @@ public:
     }
 
     bool TraverseCXXConstructExpr(clang::CXXConstructExpr* x) {
-        if( x->getNumArgs() >= 0 ) {
+        ThirdPartyCPPArrayTypes third_party_array_type;
+        bool is_third_party_array_type = false;
+        Vec<ASR::dimension_t> shape_result; shape_result.reserve(al, 1);
+        ASR::ttype_t* constructor_type = ClangTypeToASRType(x->getType(), &shape_result,
+            &third_party_array_type, &is_third_party_array_type);
+        if( is_third_party_array_type && third_party_array_type == ThirdPartyCPPArrayTypes::MDSpanArray ) {
+            if( x->getNumArgs() >= 1 ) {
+                clang::Expr* _data = x->getArg(0);
+                TraverseStmt(_data);
+                ASR::expr_t* list_to_array = ASRUtils::EXPR(tmp.get());
+                if( !ASR::is_a<ASR::Cast_t>(*list_to_array) ||
+                    ASR::down_cast<ASR::Cast_t>(list_to_array)->m_kind !=
+                    ASR::cast_kindType::ListToArray) {
+                    throw std::runtime_error("First argument of Kokkos::mdspan "
+                        "constructor should be a call to std::vector::data() function.");
+                }
+                if( ASRUtils::extract_n_dims_from_ttype(constructor_type) != x->getNumArgs() - 1 ) {
+                    throw std::runtime_error("Shape provided in the constructor "
+                        "doesn't match with the rank of the array.");
+                }
+                Vec<ASR::dimension_t> alloc_dims; alloc_dims.reserve(al, x->getNumArgs() - 1);
+                Vec<ASR::alloc_arg_t> alloc_args; alloc_args.reserve(al, 1);
+                for( int i = 1; i < x->getNumArgs(); i++ ) {
+                    clang::Expr* argi = x->getArg(i);
+                    TraverseStmt(argi);
+                    ASR::dimension_t alloc_dim;
+                    alloc_dim.loc = Lloc(x);
+                    alloc_dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, Lloc(x), 1,
+                        ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
+                    alloc_dim.m_length = ASRUtils::EXPR(tmp.get());
+                    alloc_dims.push_back(al, alloc_dim);
+                }
+                ASR::alloc_arg_t alloc_arg;
+                alloc_arg.loc = Lloc(x);
+                LCOMPILERS_ASSERT(assignment_target != nullptr);
+                alloc_arg.m_a = assignment_target;
+                alloc_arg.m_dims = alloc_dims.p; alloc_arg.n_dims = alloc_dims.size();
+                alloc_arg.m_len_expr = nullptr; alloc_arg.m_type = nullptr;
+                alloc_args.push_back(al, alloc_arg);
+                Vec<ASR::expr_t*> dealloc_args; dealloc_args.reserve(al, 1);
+                dealloc_args.push_back(al, assignment_target);
+                current_body->push_back(al, ASRUtils::STMT(ASR::make_ExplicitDeallocate_t(
+                    al, Lloc(x), dealloc_args.p, dealloc_args.size())));
+                current_body->push_back(al, ASRUtils::STMT(ASR::make_Allocate_t(al, Lloc(x),
+                    alloc_args.p, alloc_args.size(), nullptr, nullptr, nullptr)));
+                tmp = reinterpret_cast<ASR::asr_t*>(list_to_array);
+                is_stmt_created = false;
+                return true;
+            } else {
+                throw std::runtime_error("Kokkos::mdspan constructor is called "
+                                         "with incorrect number of arguments, "
+                                         "expected 3 and found, " + std::to_string(x->getNumArgs()));
+            }
+        } else if( x->getNumArgs() >= 0 ) {
             return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseCXXConstructExpr(x);
         }
         tmp = nullptr;
@@ -1501,7 +1631,9 @@ public:
     }
 
     void add_reshape_if_needed(ASR::expr_t*& expr, ASR::expr_t* target_expr) {
-        if( ASR::is_a<ASR::List_t>(*ASRUtils::expr_type(target_expr)) ) {
+        if( ASR::is_a<ASR::List_t>(*ASRUtils::expr_type(target_expr)) ||
+            ((ASR::is_a<ASR::Cast_t>(*expr) &&
+             ASR::down_cast<ASR::Cast_t>(expr)->m_kind == ASR::cast_kindType::ListToArray)) ) {
             return ;
         }
         ASR::ttype_t* expr_type = ASRUtils::expr_type(expr);
