@@ -473,6 +473,7 @@ cast_kind
     | CPtrToUnsignedInteger
     | UnsignedIntegerToCPtr
     | IntegerToSymbolicExpression
+    | ListToArray
 
 dimension = (expr? start, expr? length)
 

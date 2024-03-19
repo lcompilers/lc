@@ -945,6 +945,9 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
 
 
     void replace_Cast(ASR::Cast_t* x) {
+        if( x->m_kind == ASR::cast_kindType::ListToArray ) {
+            return ;
+        }
         ASR::expr_t* result_var_copy = result_var;
         result_var = nullptr;
         BaseExprReplacer::replace_Cast(x);
