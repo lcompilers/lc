@@ -4477,6 +4477,9 @@ public:
         bool is_value_set = ASR::is_a<ASR::Set_t>(*asr_value_type);
         bool is_target_struct = ASR::is_a<ASR::Struct_t>(*asr_target_type);
         bool is_value_struct = ASR::is_a<ASR::Struct_t>(*asr_value_type);
+        bool is_target_array = ASRUtils::is_array(asr_target_type);
+        bool is_value_list_to_array = (ASR::is_a<ASR::Cast_t>(*x.m_value) &&
+            ASR::down_cast<ASR::Cast_t>(x.m_value)->m_kind == ASR::cast_kindType::ListToArray);
         if (ASR::is_a<ASR::StringSection_t>(*x.m_target)) {
             handle_StringSection_Assignment(x.m_target, x.m_value);
             if (tmp == strings_to_be_deallocated.back()) {
@@ -4695,7 +4698,33 @@ public:
                 target = CreateLoad(target);
             }
             ASR::ttype_t *cont_type = ASRUtils::get_contained_type(asr_target_type);
-            if (ASRUtils::is_array(cont_type) && ASRUtils::is_array(cont_type) ) {
+            if ( ASRUtils::is_array(cont_type) ) {
+                if( is_value_list_to_array ) {
+                    if( ASRUtils::extract_physical_type(asr_target_type) !=
+                        ASR::array_physical_typeType::DescriptorArray ) {
+                        throw CodeGenError("ListToArray cast output can "
+                            "only be assigned to a descriptor based array.");
+                    }
+                    this->visit_expr_wrapper(x.m_value, true);
+                    llvm::Value* list_data = tmp;
+                    int64_t ptr_loads_copy = ptr_loads;
+                    ptr_loads = 0;
+                    this->visit_expr(*ASR::down_cast<ASR::Cast_t>(x.m_value)->m_arg);
+                    llvm::Value* plist = tmp;
+                    ptr_loads = ptr_loads_copy;
+                    llvm::Value* array_data = LLVM::CreateLoad(*builder,
+                        arr_descr->get_pointer_to_data(LLVM::CreateLoad(*builder, target)));
+                    llvm::Value* size = list_api->len(plist);
+                    llvm::Type* el_type = llvm_utils->get_type_from_ttype_t_util(
+                        ASRUtils::extract_type(ASRUtils::expr_type(x.m_value)), module.get());
+                    llvm::DataLayout data_layout(module.get());
+                    uint64_t size_ = data_layout.getTypeAllocSize(el_type);
+                    size = builder->CreateMul(size, llvm::ConstantInt::get(
+                        llvm::Type::getInt32Ty(context), llvm::APInt(32, size_)));
+                    builder->CreateMemCpy(array_data, llvm::MaybeAlign(),
+                                          list_data, llvm::MaybeAlign(), size);
+                    return ;
+                }
                 if( asr_target->m_type->type == ASR::ttypeType::Character) {
                     target = CreateLoad(arr_descr->get_pointer_to_data(target));
                 }
@@ -6962,6 +6991,20 @@ public:
                 llvm::Value *zero_str = builder->CreateGlobalStringPtr("False");
                 llvm::Value *one_str = builder->CreateGlobalStringPtr("True");
                 tmp = builder->CreateSelect(cmp, zero_str, one_str);
+                break;
+            }
+            case (ASR::cast_kindType::ListToArray) : {
+                if( !ASR::is_a<ASR::List_t>(*ASRUtils::expr_type(x.m_arg)) ) {
+                    throw CodeGenError("The argument of ListToArray cast should "
+                        "be a list/std::vector, found, " + ASRUtils::type_to_str(
+                            ASRUtils::expr_type(x.m_arg)));
+                }
+                int64_t ptr_loads_copy = ptr_loads;
+                ptr_loads = 0;
+                this->visit_expr(*x.m_arg);
+                ptr_loads = ptr_loads_copy;
+                llvm::Value* arg = tmp;
+                tmp = LLVM::CreateLoad(*builder, list_api->get_pointer_to_list_data(tmp));
                 break;
             }
             default : throw CodeGenError("Cast kind not implemented");
