@@ -4,7 +4,7 @@
 
 void print(Kokkos::mdspan<double, Kokkos::dextents<int32_t, 1>>& arr) {
     for( int32_t i = 0; i < arr.size(); i++ ) {
-        std::cout << arr[i] << std::endl;
+        std::cout << arr[i] << "\n";
     }
 }
 
