@@ -76,5 +76,10 @@ jobs:
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'macos')
         run: |
             export CPATH=$CONDA_PREFIX/include:$CPATH
+            git clone https://github.com/czgdp1807/mdspan
+            cd mdspan
+            cmake . -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+            make install
+            cd ..
             ./integration_tests/run_tests.py -b gcc llvm wasm c
             ./integration_tests/run_tests.py -b gcc llvm wasm c -f
