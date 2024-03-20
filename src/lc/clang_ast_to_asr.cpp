@@ -12,6 +12,8 @@
 #include <libasr/pass/intrinsic_array_function_registry.h>
 #include <lc/clang_ast_to_asr.h>
 
+#include <set>
+
 namespace LCompilers {
 
 enum SpecialFunc {
@@ -176,6 +178,7 @@ public:
     std::map<SymbolTable*, std::vector<ASR::symbol_t*>> scope2enums;
     clang::ForStmt* for_loop;
     bool inside_loop;
+    std::set<ASR::symbol_t*> read_only_symbols;
 
     explicit ClangASTtoASRVisitor(clang::ASTContext *Context_,
         Allocator& al_, ASR::asr_t*& tu_):
@@ -1585,6 +1588,8 @@ public:
                     ASR::cast_kindType::ListToArray) {
                     throw std::runtime_error("First argument of Kokkos::mdspan "
                         "constructor should be a call to std::vector::data() function.");
+                } else {
+                    mark_as_read_only(list_to_array);
                 }
                 if( ASRUtils::extract_n_dims_from_ttype(constructor_type) != x->getNumArgs() - 1 ) {
                     throw std::runtime_error("Shape provided in the constructor "
@@ -2139,6 +2144,111 @@ public:
         }
     }
 
+    void mark_as_read_only(ASR::symbol_t* symbol) {
+        read_only_symbols.insert(ASRUtils::symbol_get_past_external(symbol));
+    }
+
+    void mark_as_read_only(ASR::expr_t* list_to_array, bool root=true) {
+        ASR::expr_t* expr = list_to_array;
+        if( root ) {
+            if( !ASR::is_a<ASR::Cast_t>(*list_to_array) ) {
+                return ;
+            }
+            ASR::Cast_t* cast_t = ASR::down_cast<ASR::Cast_t>(list_to_array);
+            if( cast_t->m_kind != ASR::cast_kindType::ListToArray ) {
+                return ;
+            }
+
+            expr = cast_t->m_arg;
+        }
+
+        switch( expr->type ) {
+            case ASR::exprType::Var: {
+                ASR::Var_t* var_t = ASR::down_cast<ASR::Var_t>(expr);
+                return mark_as_read_only(var_t->m_v);
+            }
+            case ASR::exprType::ListItem: {
+                ASR::ListItem_t* list_item_t = ASR::down_cast<ASR::ListItem_t>(expr);
+                return mark_as_read_only(list_item_t->m_a, false);
+            }
+            case ASR::exprType::ListSection: {
+                ASR::ListSection_t* list_section_t = ASR::down_cast<ASR::ListSection_t>(expr);
+                return mark_as_read_only(list_section_t->m_a, false);
+            }
+            case ASR::exprType::StructInstanceMember: {
+                ASR::StructInstanceMember_t* struct_instance_member_t = ASR::down_cast<ASR::StructInstanceMember_t>(expr);
+                return mark_as_read_only(struct_instance_member_t->m_m);
+            }
+            case ASR::exprType::StructStaticMember: {
+                ASR::StructStaticMember_t* struct_static_member_t = ASR::down_cast<ASR::StructStaticMember_t>(expr);
+                return mark_as_read_only(struct_static_member_t->m_m);
+            }
+            case ASR::exprType::EnumStaticMember: {
+                ASR::EnumStaticMember_t* enum_static_member_t = ASR::down_cast<ASR::EnumStaticMember_t>(expr);
+                return mark_as_read_only(enum_static_member_t->m_m);
+            }
+            case ASR::exprType::UnionInstanceMember: {
+                ASR::UnionInstanceMember_t* union_instance_member_t = ASR::down_cast<ASR::UnionInstanceMember_t>(expr);
+                return mark_as_read_only(union_instance_member_t->m_m);
+            }
+            default: {
+                throw std::runtime_error("ASRUtils::exprType::" + std::to_string(expr->type) +
+                    " is not handled yet in is_read_only method.");
+            }
+        }
+    }
+
+    bool is_read_only(ASR::symbol_t* symbol, std::string& symbol_name) {
+        if( read_only_symbols.find(ASRUtils::symbol_get_past_external(symbol)) !=
+            read_only_symbols.end() ) {
+            symbol_name = ASRUtils::symbol_name(ASRUtils::symbol_get_past_external(symbol));
+            return true;
+        }
+        return false;
+    }
+
+    bool is_read_only(ASR::expr_t* expr, std::string& symbol_name) {
+        switch( expr->type ) {
+            case ASR::exprType::Var: {
+                ASR::Var_t* var_t = ASR::down_cast<ASR::Var_t>(expr);
+                return is_read_only(var_t->m_v, symbol_name);
+            }
+            case ASR::exprType::ListItem: {
+                ASR::ListItem_t* list_item_t = ASR::down_cast<ASR::ListItem_t>(expr);
+                return is_read_only(list_item_t->m_a, symbol_name);
+            }
+            case ASR::exprType::ArrayItem: {
+                ASR::ArrayItem_t* array_item_t = ASR::down_cast<ASR::ArrayItem_t>(expr);
+                return is_read_only(array_item_t->m_v, symbol_name);
+            }
+            case ASR::exprType::ListSection: {
+                ASR::ListSection_t* list_section_t = ASR::down_cast<ASR::ListSection_t>(expr);
+                return is_read_only(list_section_t->m_a, symbol_name);
+            }
+            case ASR::exprType::StructInstanceMember: {
+                ASR::StructInstanceMember_t* struct_instance_member_t = ASR::down_cast<ASR::StructInstanceMember_t>(expr);
+                return is_read_only(struct_instance_member_t->m_m, symbol_name);
+            }
+            case ASR::exprType::StructStaticMember: {
+                ASR::StructStaticMember_t* struct_static_member_t = ASR::down_cast<ASR::StructStaticMember_t>(expr);
+                return is_read_only(struct_static_member_t->m_m, symbol_name);
+            }
+            case ASR::exprType::EnumStaticMember: {
+                ASR::EnumStaticMember_t* enum_static_member_t = ASR::down_cast<ASR::EnumStaticMember_t>(expr);
+                return is_read_only(enum_static_member_t->m_m, symbol_name);
+            }
+            case ASR::exprType::UnionInstanceMember: {
+                ASR::UnionInstanceMember_t* union_instance_member_t = ASR::down_cast<ASR::UnionInstanceMember_t>(expr);
+                return is_read_only(union_instance_member_t->m_m, symbol_name);
+            }
+            default: {
+                throw std::runtime_error("ASRUtils::exprType::" + std::to_string(expr->type) +
+                    " is not handled yet in is_read_only method.");
+            }
+        }
+        return false;
+    }
+
     bool TraverseBinaryOperator(clang::BinaryOperator *x) {
         clang::BinaryOperatorKind op = x->getOpcode();
         TraverseStmt(x->getLHS());
@@ -2146,6 +2256,10 @@ public:
         TraverseStmt(x->getRHS());
         ASR::expr_t* x_rhs = ASRUtils::EXPR(tmp.get());
         if( op == clang::BO_Assign ) {
+            std::string symbol_name = "";
+            if( is_read_only(x_lhs, symbol_name) ) {
+                throw std::runtime_error(symbol_name + " is marked as read only.");
+            }
             cast_helper(x_lhs, x_rhs, true);
             ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), x_lhs, x_rhs);
             tmp = ASR::make_Assignment_t(al, Lloc(x), x_lhs, x_rhs, nullptr);
