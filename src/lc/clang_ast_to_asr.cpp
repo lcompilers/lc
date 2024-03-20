@@ -2258,7 +2258,8 @@ public:
         if( op == clang::BO_Assign ) {
             std::string symbol_name = "";
             if( is_read_only(x_lhs, symbol_name) ) {
-                throw std::runtime_error(symbol_name + " is marked as read only.");
+                std::cerr << symbol_name + " is marked as read only." << std::endl;
+                exit(EXIT_FAILURE);
             }
             cast_helper(x_lhs, x_rhs, true);
             ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), x_lhs, x_rhs);
