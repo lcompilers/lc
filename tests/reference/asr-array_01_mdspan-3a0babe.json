@@ -1,0 +1,13 @@
+{
+    "basename": "asr-array_01_mdspan-3a0babe",
+    "cmd": "lc --show-asr --no-color {infile} -o {outfile}",
+    "infile": "tests/array_01_mdspan.cpp",
+    "infile_hash": "89f0c42a5270d3e994901c745aeb9d6b6d005eb466f53abc3c6b0684",
+    "outfile": null,
+    "outfile_hash": null,
+    "stdout": null,
+    "stdout_hash": null,
+    "stderr": "asr-array_01_mdspan-3a0babe.stderr",
+    "stderr_hash": "3264f525d743d89d584cc1700c25c652a33211e30d73260d7a885fc1",
+    "returncode": -6
+}
