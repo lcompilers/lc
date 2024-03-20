@@ -8,6 +8,6 @@
     "stdout": null,
     "stdout_hash": null,
     "stderr": "asr-array_01_mdspan-3a0babe.stderr",
-    "stderr_hash": "3264f525d743d89d584cc1700c25c652a33211e30d73260d7a885fc1",
-    "returncode": -6
+    "stderr_hash": "75fae36610809dcd01894bb09490f3b174e656cf490f47aa38aa5caf",
+    "returncode": 1
 }
