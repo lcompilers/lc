@@ -23,6 +23,14 @@ llvm = true
 fortran = true
 
 [[test]]
+filename = "array_01_mdspan.cpp"
+asr = true
+
+[[test]]
+filename = "array_02_mdspan.cpp"
+asr = true
+
+[[test]]
 filename = "../integration_tests/array_01.cpp"
 asr = true
 
