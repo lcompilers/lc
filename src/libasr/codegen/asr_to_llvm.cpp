@@ -1023,6 +1023,30 @@ public:
         visit_AllocateUtil(x, x.m_stat, false);
     }
 
+    void visit_ListReserve(const ASR::ListReserve_t& x) {
+        ASR::ttype_t* el_type = ASRUtils::get_contained_type(
+                                        ASRUtils::expr_type(x.m_a));
+        int64_t ptr_loads_copy = ptr_loads;
+        ptr_loads = 0;
+        this->visit_expr(*x.m_a);
+        llvm::Value* plist = tmp;
+
+        ptr_loads = 1;
+        this->visit_expr_wrapper(x.m_size, true);
+        ptr_loads = ptr_loads_copy;
+        llvm::Value *pos = tmp;
+
+        llvm::Value* list_data_ptr = list_api->get_pointer_to_list_data(plist);
+        llvm::Value* size = list_api->len(plist);
+        llvm::DataLayout data_layout(module.get());
+        llvm::Type* llvm_el_type = llvm_utils->get_type_from_ttype_t_util(el_type, module.get());
+        size_t el_struct_size = data_layout.getTypeAllocSize(llvm_el_type);
+        size = builder->CreateMul(size, llvm::ConstantInt::get(
+            llvm::Type::getInt32Ty(context), llvm::APInt(32, el_struct_size)));
+        llvm::Value* alloc_ptr = LLVM::lfortran_malloc(context, *module, *builder, size);
+        builder->CreateStore(builder->CreateBitCast(alloc_ptr, llvm_el_type->getPointerTo()), list_data_ptr);
+    }
+
     void visit_ReAlloc(const ASR::ReAlloc_t& x) {
         LCOMPILERS_ASSERT(x.n_args == 1);
         handle_allocated(x.m_args[0].m_a);

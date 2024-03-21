@@ -43,16 +43,20 @@ enum SpecialFunc {
     PushBack,
     Clear,
     Data,
+    Reserve,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
     {"printf", SpecialFunc::Printf},
     {"exit", SpecialFunc::Exit},
     {"view", SpecialFunc::View},
+    {"submdspan", SpecialFunc::View},
     {"shape", SpecialFunc::Shape},
+    {"extent", SpecialFunc::Shape},
     {"empty", SpecialFunc::Empty},
     {"fill", SpecialFunc::Fill},
     {"all", SpecialFunc::All},
+    {"full_extent", SpecialFunc::All},
     {"any", SpecialFunc::Any},
     {"not_equal", SpecialFunc::NotEqual},
     {"equal", SpecialFunc::Equal},
@@ -72,6 +76,7 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"push_back", SpecialFunc::PushBack},
     {"clear", SpecialFunc::Clear},
     {"data", SpecialFunc::Data},
+    {"reserve", SpecialFunc::Reserve},
 };
 
 class OneTimeUseString {
@@ -455,6 +460,7 @@ public:
                 if( array_type && is_third_party_cpp_array ) {
                     *is_third_party_cpp_array = true;
                     *array_type = ThirdPartyCPPArrayTypes::MDSpanArray;
+                    xshape_result->from_pointer_n(xtensor_fixed_dims.p, xtensor_fixed_dims.size());
                 }
                 type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
                     ClangTypeToASRType(qual_type),
@@ -483,6 +489,34 @@ public:
                 ASR::expr_t* zero = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
                     ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
                 for( int i = 0; i < template_arguments.size(); i++ ) {
+                    clang::Expr* clang_rank = template_arguments.at(i).getAsExpr();
+                    TraverseStmt(clang_rank);
+                    int rank = 0;
+                    if( !ASRUtils::extract_value(ASRUtils::EXPR(tmp.get()), rank) ) {
+                        throw std::runtime_error("Rank provided in the xshape must be a constant.");
+                    }
+                    ASR::dimension_t dim; dim.loc = l;
+                    dim.m_length = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, rank,
+                        ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+                    dim.m_start = zero;
+                    xshape_result->push_back(al, dim);
+                }
+                return nullptr;
+            } else if( template_name == "extents" ) {
+                const std::vector<clang::TemplateArgument>& template_arguments = template_specialization->template_arguments();
+                if( xshape_result == nullptr ) {
+                    throw std::runtime_error("Result Vec<ASR::dimention_t>* not provided.");
+                }
+
+                const clang::QualType& qual_type = template_arguments.at(0).getAsType();
+                ASR::ttype_t* index_type = ClangTypeToASRType(qual_type);
+                if( !ASR::is_a<ASR::Integer_t>(*index_type) ||
+                    ASRUtils::extract_kind_from_ttype_t(index_type) != 4 ) {
+                    throw std::runtime_error("Only int32_t should be used for index type in Kokkos::dextents.");
+                }
+                ASR::expr_t* zero = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
+                    ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
+                for( int i = 1; i < template_arguments.size(); i++ ) {
                     clang::Expr* clang_rank = template_arguments.at(i).getAsExpr();
                     TraverseStmt(clang_rank);
                     int rank = 0;
@@ -553,7 +587,7 @@ public:
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Record ) {
             const clang::CXXRecordDecl* record_type = clang_type->getAsCXXRecordDecl();
             std::string name = record_type->getNameAsString();
-            if( name == "xtensor_container" || name == "vector" ) {
+            if( name == "xtensor_container" || name == "vector" || name == "mdspan" ) {
                 return nullptr;
             }
             ASR::symbol_t* type_t = current_scope->resolve_symbol(name);
@@ -565,6 +599,8 @@ public:
             } else {
                 type = ASRUtils::TYPE(ASR::make_Struct_t(al, l, type_t));
             }
+        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::SubstTemplateTypeParm ) {
+            return nullptr;
         } else {
             throw std::runtime_error("clang::QualType not yet supported " +
                 std::string(clang_type->getTypeClassName()));
@@ -995,6 +1031,13 @@ public:
                     ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), obj, value);
                     tmp = ASR::make_Assignment_t(al, Lloc(x), obj, value, nullptr);
                     is_stmt_created = true;
+                } else {
+                    // This means that right hand side of operator=
+                    // was a CXXConstructor and there was an allocation
+                    // statement created for it. So skip and return should
+                    // done in this case.
+                    tmp = nullptr;
+                    is_stmt_created = false;
                 }
                 assignment_target = nullptr;
             } else if( ASRUtils::is_complex(*ASRUtils::expr_type(obj)) ||
@@ -1393,8 +1436,9 @@ public:
                 }
                 alloc_arg.m_dims = alloc_dims.p; alloc_arg.n_dims = alloc_dims.size();
                 alloc_args.push_back(al, alloc_arg);
-                tmp = ASR::make_Allocate_t(al, Lloc(x), alloc_args.p, alloc_args.size(),
-                    nullptr, nullptr, nullptr);
+                current_body->push_back(al, ASRUtils::STMT(ASR::make_Allocate_t(al, Lloc(x),
+                    alloc_args.p, alloc_args.size(), nullptr, nullptr, nullptr)));
+                tmp = nullptr;
                 is_stmt_created = true;
             } else {
                 throw std::runtime_error("Only {...} is allowed for supplying shape to xt::empty.");
@@ -1437,6 +1481,13 @@ public:
             tmp = ASRUtils::make_Cast_t_value(al, Lloc(x), callee, ASR::cast_kindType::ListToArray,
                 ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x), ASRUtils::get_contained_type(ASRUtils::expr_type(callee)),
                 dims.p, dims.size(), ASR::array_physical_typeType::UnboundedPointerToDataArray)));
+        } else if (sf == SpecialFunc::Reserve) {
+            if( args.size() > 1 ) {
+                throw std::runtime_error("std::vector::reserve should be called with only one argument.");
+            }
+
+            tmp = ASR::make_ListReserve_t(al, Lloc(x), callee, args[0]);
+            is_stmt_created = true;
         } else {
             throw std::runtime_error("Only printf and exit special functions supported");
         }
@@ -1579,7 +1630,37 @@ public:
         ASR::ttype_t* constructor_type = ClangTypeToASRType(x->getType(), &shape_result,
             &third_party_array_type, &is_third_party_array_type);
         if( is_third_party_array_type && third_party_array_type == ThirdPartyCPPArrayTypes::MDSpanArray ) {
-            if( x->getNumArgs() >= 1 ) {
+            if( x->getNumArgs() == 0 ) {
+                tmp = nullptr;
+                is_stmt_created = false;
+                return true;
+            }
+            if( x->getNumArgs() == 1 ) {
+                if( shape_result.size() != ASRUtils::extract_n_dims_from_ttype(constructor_type) ) {
+                    throw std::runtime_error("Allocation sizes for all dimensions not provided.");
+                }
+                if( !ASRUtils::is_fixed_size_array(shape_result.p, shape_result.size()) ) {
+                    throw std::runtime_error("Allocation size of Kokkos::mdspan array isn't specified correctly.");
+                }
+
+                Vec<ASR::alloc_arg_t> alloc_args; alloc_args.reserve(al, 1);
+                ASR::alloc_arg_t alloc_arg;
+                alloc_arg.loc = Lloc(x);
+                LCOMPILERS_ASSERT(assignment_target != nullptr);
+                alloc_arg.m_a = assignment_target;
+                alloc_arg.m_dims = shape_result.p; alloc_arg.n_dims = shape_result.size();
+                alloc_arg.m_len_expr = nullptr; alloc_arg.m_type = nullptr;
+                alloc_args.push_back(al, alloc_arg);
+                Vec<ASR::expr_t*> dealloc_args; dealloc_args.reserve(al, 1);
+                dealloc_args.push_back(al, assignment_target);
+                current_body->push_back(al, ASRUtils::STMT(ASR::make_ExplicitDeallocate_t(
+                    al, Lloc(x), dealloc_args.p, dealloc_args.size())));
+                current_body->push_back(al, ASRUtils::STMT(ASR::make_Allocate_t(al, Lloc(x),
+                    alloc_args.p, alloc_args.size(), nullptr, nullptr, nullptr)));
+                tmp = nullptr;
+                is_stmt_created = true;
+                return true;
+            } else if( x->getNumArgs() >= 1 ) {
                 clang::Expr* _data = x->getArg(0);
                 TraverseStmt(_data);
                 ASR::expr_t* list_to_array = ASRUtils::EXPR(tmp.get());
@@ -1602,7 +1683,7 @@ public:
                     TraverseStmt(argi);
                     ASR::dimension_t alloc_dim;
                     alloc_dim.loc = Lloc(x);
-                    alloc_dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, Lloc(x), 1,
+                    alloc_dim.m_start = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, Lloc(x), 0,
                         ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4))));
                     alloc_dim.m_length = ASRUtils::EXPR(tmp.get());
                     alloc_dims.push_back(al, alloc_dim);
@@ -1625,9 +1706,13 @@ public:
                 return true;
             } else {
                 throw std::runtime_error("Kokkos::mdspan constructor is called "
-                                         "with incorrect number of arguments, "
-                                         "expected 3 and found, " + std::to_string(x->getNumArgs()));
+                    "with incorrect number of arguments, expected " + std::to_string(
+                        ASRUtils::extract_n_dims_from_ttype(constructor_type) + 1) +
+                        " and found, " + std::to_string(x->getNumArgs()));
             }
+        } else if( constructor_type == nullptr ) {
+            clang::Expr* x_ = x->getArg(0);
+            return TraverseStmt(x_);
         } else if( x->getNumArgs() >= 0 ) {
             return clang::RecursiveASTVisitor<ClangASTtoASRVisitor>::TraverseCXXConstructExpr(x);
         }
@@ -1751,8 +1836,12 @@ public:
             case clang::APValue::Struct: {
                 ASR::ttype_t* v_type = ASRUtils::type_get_past_const(ASRUtils::symbol_type(v));
                 if( !ASR::is_a<ASR::Struct_t>(*v_type) ) {
-                    throw std::runtime_error("Expected ASR::Struct_t type found, " +
-                        ASRUtils::type_to_str(v_type));
+                    // throw std::runtime_error("Expected ASR::Struct_t type found, " +
+                    //     ASRUtils::type_to_str(v_type));
+                    // No error, just return, clang marking something as Struct
+                    // doesn't mean that it necessarily maps to ASR Struct, it can
+                    // map to ASR Array type as well
+                    return ;
                 }
                 ASR::Struct_t* struct_t = ASR::down_cast<ASR::Struct_t>(v_type);
                 ASR::StructType_t* struct_type_t = ASR::down_cast<ASR::StructType_t>(
@@ -1820,6 +1909,9 @@ public:
                     tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
                     is_stmt_created = true;
                 }
+            } else {
+                is_stmt_created = false;
+                tmp = nullptr;
             }
 
             if( x->getEvaluatedValue() ) {
@@ -2376,8 +2468,8 @@ public:
         ASR::symbol_t* sym = resolve_symbol(name);
         if( name == "operator<<" || name == "cout" || name == "endl" ||
             name == "operator()" || name == "operator+" || name == "operator=" ||
-            name == "operator*" || name == "view" || name == "empty" ||
-            name == "all" || name == "any" || name == "not_equal" ||
+            name == "operator*" || name == "view" || name == "submdspan" || name == "empty" ||
+            name == "all" || name == "full_extent" || name == "any" || name == "not_equal" ||
             name == "exit" || name == "printf" || name == "exp" ||
             name == "sum" || name == "amax" || name == "abs" ||
             name == "operator-" || name == "operator/" || name == "operator>" ||
@@ -2390,7 +2482,11 @@ public:
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
             }
             if( sym == nullptr ) {
-                cxx_operator_name_obj.set(name);
+                if( name == "full_extent" ) {
+                    is_all_called = true;
+                } else {
+                    cxx_operator_name_obj.set(name);
+                }
                 tmp = nullptr;
                 return true;
             }
