@@ -229,6 +229,7 @@ stmt
     | BlockCall(int label, symbol m)
     | SetInsert(expr a, expr ele)
     | SetRemove(expr a, expr ele)
+    | ListReserve(expr a, expr size)
     | ListInsert(expr a, expr pos, expr ele)
     | ListRemove(expr a, expr ele)
     | ListClear(expr a)
