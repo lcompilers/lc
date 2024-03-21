@@ -83,3 +83,14 @@ jobs:
             export CPATH=$CONDA_PREFIX/include:$CPATH
             ./integration_tests/run_tests.py -b gcc llvm wasm c
             ./integration_tests/run_tests.py -b gcc llvm wasm c -f
+
+      - name: Test4 (Linux)
+        shell: bash -l -e {0}
+        if: contains(matrix.os, 'ubuntu')
+        run: |
+            export CPATH=$CONDA_PREFIX/include:$CPATH
+            conda install --yes pytorch::pytorch
+            cp -r $CONDA_PREFIX/lib/python3.12/site-packages/torch/include/* $CONDA_PREFIX/include/
+            cp -r $CONDA_PREFIX/lib/python3.12/site-packages/torch/lib/* $CONDA_PREFIX/lib/
+            cp -r $CONDA_PREFIX/lib/python3.12/site-packages/torch/share/* $CONDA_PREFIX/share/
+            ./integration_tests/run_tests.py -b pytorch
