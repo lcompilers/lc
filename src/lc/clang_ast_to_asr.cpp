@@ -606,6 +606,8 @@ public:
                     type = ASRUtils::TYPE(ASR::make_Array_t(al, l, ASRUtils::TYPE(ASR::make_Real_t(al, l, 4)),
                         nullptr, 0, ASR::array_physical_typeType::DescriptorArray));
                     return type;
+                } else if( qualified_name == "c10::Scalar" ) {
+                    return nullptr;
                 }
                 throw std::runtime_error(qualified_name + " not defined.");
             }
@@ -1062,7 +1064,8 @@ public:
                 assignment_target = nullptr;
             } else if( ASRUtils::is_complex(*ASRUtils::expr_type(obj)) ||
                        ASR::is_a<ASR::Struct_t>(*ASRUtils::extract_type(
-                        ASRUtils::expr_type(obj))) ) {
+                        ASRUtils::expr_type(obj))) ||
+                       ASR::is_a<ASR::ArrayItem_t>(*obj) ) {
                 TraverseStmt(args[1]);
                 if( !is_stmt_created ) {
                     ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
@@ -2239,10 +2242,10 @@ public:
     void CreateBinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
         ASR::binopType binop_type, const Location& loc) {
         cast_helper(lhs, rhs, false);
+        ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
         ASR::ttype_t* result_type = ASRUtils::type_get_past_const(
             ASRUtils::type_get_past_allocatable(
                 ASRUtils::type_get_past_pointer(ASRUtils::expr_type(lhs))));
-        ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
         if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
             ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
