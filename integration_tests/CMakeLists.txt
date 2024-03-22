@@ -84,7 +84,7 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
 
     if (ADD_TEST)
         if ((LC_BACKEND STREQUAL "llvm") OR (LC_BACKEND STREQUAL "cpp") OR (LC_BACKEND STREQUAL "x86")
-                OR (LC_BACKEND STREQUAL "c") OR (LC_BACKEND STREQUAL "fortran"))
+                OR (LC_BACKEND STREQUAL "c") OR (LC_BACKEND STREQUAL "fortran") OR (LC_BACKEND STREQUAL "llvmPytorch"))
             add_custom_command(
                 OUTPUT ${name}.o
                 COMMAND ${LC} -c ${CMAKE_CURRENT_SOURCE_DIR}/${file_name} -o ${name}.o ${extra_args}
@@ -110,6 +110,16 @@ macro(RUN_UTIL RUN_FAIL RUN_NAME RUN_FILE_NAME RUN_LABELS RUN_EXTRAFILES RUN_EXT
             endif()
             set(WASM_EXEC_FLAGS ${WASM_EXEC_FLAGS} "--experimental-wasi-unstable-preview1")
             add_test(${name} ${WASM_EXEC_RUNTIME} ${WASM_EXEC_FLAGS} ${CURRENT_BINARY_DIR}/${name}.js)
+        elseif (LC_BACKEND STREQUAL "pytorch")
+            # PyTorch C++ API testing
+            find_package(Torch REQUIRED)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+
+            add_executable(${name} ${file_name} ${extra_files})
+            target_link_libraries(${name} "${TORCH_LIBRARIES}")
+            target_compile_options(${name} PUBLIC ${gcc_args})
+            set_property(TARGET ${name} PROPERTY CXX_STANDARD 17)
+            add_test(${name} ${CURRENT_BINARY_DIR}/${name})
         else ()
             add_executable(${name} ${file_name} ${extra_files})
             target_compile_options(${name} PUBLIC ${gcc_args})
@@ -138,7 +148,7 @@ macro(RUN)
                         "${multiValueArgs}" ${ARGN} )
 
     foreach(b ${RUN_LABELS})
-        if (NOT (b MATCHES "^(llvm|llvm2|llvm_rtlib|gcc|c|cpp|x86|wasm|gfortran|llvmImplicit|llvmStackArray|fortran|c_nopragma|llvm_nopragma)$"))
+        if (NOT (b MATCHES "^(llvm|llvm2|llvm_rtlib|gcc|c|cpp|x86|wasm|gfortran|llvmImplicit|llvmStackArray|fortran|c_nopragma|llvm_nopragma|pytorch|llvmPytorch)$"))
             message(FATAL_ERROR "Unsupported backend: ${b}")
         endif()
     endforeach()
@@ -241,3 +251,5 @@ RUN(NAME vector_02.cpp LABELS gcc llvm)
 RUN(NAME loop_01.cpp LABELS gcc llvm NOFAST)
 
 RUN(NAME test_pkg_lnn_01.cpp LABELS gcc llvm NOFAST)
+
+RUN(NAME pytorch_01.cpp LABELS pytorch llvmPytorch)

@@ -44,6 +44,11 @@ enum SpecialFunc {
     Clear,
     Data,
     Reserve,
+
+    TorchOnes,
+    TorchEmpty,
+    TorchFromBlob,
+    TorchTensorItem,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -77,6 +82,13 @@ std::map<std::string, SpecialFunc> special_function_map = {
     {"clear", SpecialFunc::Clear},
     {"data", SpecialFunc::Data},
     {"reserve", SpecialFunc::Reserve},
+
+    {"torch::ones", SpecialFunc::TorchOnes},
+    {"torch::empty", SpecialFunc::TorchEmpty},
+    {"torch::from_blob", SpecialFunc::TorchFromBlob},
+    {"torch::abs", SpecialFunc::Abs},
+    {"torch::any", SpecialFunc::Any},
+    {"item", SpecialFunc::TorchTensorItem},
 };
 
 class OneTimeUseString {
@@ -155,6 +167,7 @@ class OneTimeUseASRNode {
 enum ThirdPartyCPPArrayTypes {
     XTensorArray,
     MDSpanArray,
+    PyTorchArray,
 };
 
 class ClangASTtoASRVisitor: public clang::RecursiveASTVisitor<ClangASTtoASRVisitor> {
@@ -587,19 +600,37 @@ public:
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Record ) {
             const clang::CXXRecordDecl* record_type = clang_type->getAsCXXRecordDecl();
             std::string name = record_type->getNameAsString();
+            std::string qualified_name = record_type->getQualifiedNameAsString();
             if( name == "xtensor_container" || name == "vector" || name == "mdspan" ) {
                 return nullptr;
             }
             ASR::symbol_t* type_t = current_scope->resolve_symbol(name);
             if( !type_t ) {
-                throw std::runtime_error(name + " not defined.");
+                if( qualified_name == "at::Tensor" ) {
+                    if( array_type == nullptr || is_third_party_cpp_array == nullptr ) {
+                        throw std::runtime_error("IEC: array_type and is_third_party_cpp_array couldn't be set.");
+                    }
+                    *is_third_party_cpp_array = true;
+                    *array_type = ThirdPartyCPPArrayTypes::PyTorchArray;
+                    type = ASRUtils::TYPE(ASR::make_Array_t(al, l, ASRUtils::TYPE(ASR::make_Real_t(al, l, 8)),
+                        nullptr, 0, ASR::array_physical_typeType::DescriptorArray));
+                    return type;
+                } else if( qualified_name == "c10::Scalar" ) {
+                    return nullptr;
+                }
+                throw std::runtime_error(qualified_name + " not defined.");
             }
             if( clang_type->isUnionType() ) {
                 type = ASRUtils::TYPE(ASR::make_Union_t(al, l, type_t));
             } else {
                 type = ASRUtils::TYPE(ASR::make_Struct_t(al, l, type_t));
             }
-        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::SubstTemplateTypeParm ) {
+        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Using ) {
+            const clang::UsingType* using_type = clang_type->getAs<clang::UsingType>();
+            return ClangTypeToASRType(using_type->getUnderlyingType(), xshape_result,
+                array_type, is_third_party_cpp_array);
+        } else if( clang_type->getTypeClass() == clang::Type::TypeClass::SubstTemplateTypeParm ||
+                   clang_type->getTypeClass() == clang::Type::TypeClass::Typedef ) {
             return nullptr;
         } else {
             throw std::runtime_error("clang::QualType not yet supported " +
@@ -771,7 +802,18 @@ public:
         if( name == "" ) {
             name = current_scope->get_unique_name("param");
         }
-        ASR::ttype_t* type = ClangTypeToASRType(x->getType());
+
+        bool is_third_party_array_type = false;
+        ThirdPartyCPPArrayTypes array_type;
+        Vec<ASR::dimension_t> shape_result; shape_result.reserve(al, 1);
+        ASR::ttype_t* type = ClangTypeToASRType(x->getType(), &shape_result,
+            &array_type, &is_third_party_array_type);
+        if( is_third_party_array_type &&
+            array_type == ThirdPartyCPPArrayTypes::PyTorchArray ) {
+            if( !x->getDefaultArg() ) {
+                throw std::runtime_error("torch::Tensor type arguments must have default arguments.");
+            }
+        }
         ASR::intentType intent_type = ASR::intentType::InOut;
         if( ASR::is_a<ASR::Const_t>(*type) ) {
             intent_type = ASR::intentType::In;
@@ -784,20 +826,30 @@ public:
             ASRUtils::is_array(type) ) {
             throw std::runtime_error("Array objects should be passed by reference only.");
         }
-        clang::Expr *init = x->getDefaultArg();
-        ASR::expr_t* asr_init = nullptr;
-        if (init) {
-            TraverseStmt(init);
-            asr_init = ASRUtils::EXPR(tmp.get());
-        }
-
         tmp = ASR::make_Variable_t(al, Lloc(x), current_scope, s2c(al, name),
-            nullptr, 0, ASR::intentType::InOut, asr_init, nullptr,
+            nullptr, 0, intent_type, nullptr, nullptr,
             ASR::storage_typeType::Default, type, nullptr, ASR::abiType::Source,
             ASR::accessType::Public, ASR::presenceType::Required, false);
         ASR::symbol_t* tmp_sym = ASR::down_cast<ASR::symbol_t>(tmp.get());
         current_scope->add_symbol(name, tmp_sym);
-        tmp = ASR::make_Var_t(al, Lloc(x), tmp_sym);
+        ASR::asr_t* tmp_ = ASR::make_Var_t(al, Lloc(x), tmp_sym);
+
+        clang::Expr *init = x->getDefaultArg();
+        ASR::expr_t* asr_init = nullptr;
+        if (init) {
+            ASR::expr_t* assignment_target_copy = assignment_target;
+            assignment_target = ASRUtils::EXPR(tmp_);
+            TraverseStmt(init);
+            if( tmp != nullptr && !is_stmt_created ) {
+                asr_init = ASRUtils::EXPR(tmp.get());
+            }
+        }
+
+        // TODO: For PyTorch tensor create an intrinsic empty
+        // and then fill the initialiser value with a call
+        // to that intrinsic.
+
+        tmp = tmp_;
         is_stmt_created = false;
         return true;
     }
@@ -1042,7 +1094,8 @@ public:
                 assignment_target = nullptr;
             } else if( ASRUtils::is_complex(*ASRUtils::expr_type(obj)) ||
                        ASR::is_a<ASR::Struct_t>(*ASRUtils::extract_type(
-                        ASRUtils::expr_type(obj))) ) {
+                        ASRUtils::expr_type(obj))) ||
+                       ASR::is_a<ASR::ArrayItem_t>(*obj) ) {
                 TraverseStmt(args[1]);
                 if( !is_stmt_created ) {
                     ASR::expr_t* value = ASRUtils::EXPR(tmp.get());
@@ -1112,6 +1165,9 @@ public:
             func_name = std::string(ASRUtils::symbol_name(callee_Var->m_v));
         }
         if (special_function_map.find(func_name) == special_function_map.end()) {
+            if( current_scope->resolve_symbol(func_name) == nullptr ) {
+                throw std::runtime_error("ICE: " + func_name + " is not handled yet in LC.");
+            }
             return false;
         }
         SpecialFunc sf = special_function_map[func_name];
@@ -1310,6 +1366,47 @@ public:
             ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), callee, arg);
             tmp = ASR::make_Assignment_t(al, Lloc(x), callee, arg, nullptr);
             is_stmt_created = true;
+        } else if (sf == SpecialFunc::TorchTensorItem) {
+            if( args.size() != 0 ) {
+                throw std::runtime_error("torch::Tensor::item shouldn't be called with any argument.");
+            }
+            if( ASRUtils::is_array(ASRUtils::expr_type(callee)) ) {
+                throw std::runtime_error("Callee of torch::Tensor::item should be a scalar.");
+            }
+
+            tmp = reinterpret_cast<ASR::asr_t*>(callee);
+            is_stmt_created = false;
+        } else if (sf == SpecialFunc::TorchOnes) {
+            if( args.size() != 2 ) { // second one is TorchOptions, to be ignored
+                throw std::runtime_error("torch::ones should be called with only one argument.");
+            }
+
+            ASR::expr_t* shape_arg = args.p[0];
+            ASR::expr_t* one = ASRUtils::get_constant_one_with_given_type(
+                al, ASRUtils::TYPE(ASR::make_Real_t(al, Lloc(x), 8)));
+            Vec<ASR::dimension_t> expr_dims; expr_dims.reserve(al, 1);
+            if( ASR::is_a<ASR::IntegerConstant_t>(*shape_arg) ) {
+                ASR::dimension_t expr_dim;
+                expr_dim.loc = Lloc(x);
+                expr_dim.m_start = ASRUtils::get_constant_zero_with_given_type(
+                    al, ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)));
+                expr_dim.m_length = shape_arg;
+                expr_dims.push_back(al, expr_dim);
+                ASR::ttype_t* type = ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x),
+                    ASRUtils::TYPE(ASR::make_Real_t(al, Lloc(x), 8)), expr_dims.p,
+                    expr_dims.size(), ASR::array_physical_typeType::FixedSizeArray));
+                int num_ones = ASR::down_cast<ASR::IntegerConstant_t>(shape_arg)->m_n;
+                Vec<ASR::expr_t*> ones_vec; ones_vec.reserve(al, num_ones);
+                for( size_t onei = 0; onei < num_ones; onei++ ) {
+                    ones_vec.push_back(al, one);
+                }
+                tmp = ASR::make_ArrayConstant_t(al, Lloc(x), ones_vec.p, ones_vec.size(),
+                    type, ASR::arraystorageType::RowMajor);
+                is_stmt_created = false;
+            } else if( ASR::is_a<ASR::ArrayConstant_t>(*shape_arg) ) {
+                throw std::runtime_error("{...} not yet supported in torch::ones");
+            }
+            is_stmt_created = false;
         } else if( sf == SpecialFunc::All ) {
             // Handles xt::all() - no arguments
             // Handle with argument case later.
@@ -1442,6 +1539,59 @@ public:
                 is_stmt_created = true;
             } else {
                 throw std::runtime_error("Only {...} is allowed for supplying shape to xt::empty.");
+            }
+        } else if (sf == SpecialFunc::TorchEmpty) {
+            if( args.size() < 1 ) { // Ignore the last two
+                throw std::runtime_error("torch::empty must be provided with shape.");
+            }
+            if( assignment_target != nullptr && ASRUtils::expr_intent(assignment_target) == ASR::intentType::Local) {
+                throw std::runtime_error("torch::empty isn't handled in assignment statement yet.");
+            }
+
+            if( ASR::is_a<ASR::ArrayConstant_t>(*args.p[0]) ) {
+                ASR::ArrayConstant_t* array_constant = ASR::down_cast<ASR::ArrayConstant_t>(args.p[0]);
+
+                Vec<ASR::dimension_t> empty_dims; empty_dims.reserve(al, array_constant->n_args);
+                for( size_t idim = 0; idim < array_constant->n_args; idim++ ) {
+                    ASR::dimension_t empty_dim;
+                    empty_dim.loc = Lloc(x);
+                    empty_dim.m_start = ASRUtils::get_constant_zero_with_given_type(
+                        al, ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)));
+                    empty_dim.m_length = nullptr;
+                    empty_dims.push_back(al, empty_dim);
+                }
+                ASR::ttype_t* type = ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x),
+                    ASRUtils::extract_type(ASRUtils::expr_type(assignment_target)),
+                    empty_dims.p, empty_dims.size(), ASR::array_physical_typeType::DescriptorArray));
+                type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, Lloc(x), type));
+                ASR::down_cast<ASR::Variable_t>(
+                    ASR::down_cast<ASR::Var_t>(assignment_target)->m_v)->m_type = type;
+                tmp = nullptr;
+                is_stmt_created = false;
+            } else {
+                throw std::runtime_error("Only {...} is allowed for supplying shape to xt::empty.");
+            }
+        } else if (sf == SpecialFunc::TorchFromBlob) {
+            if( args.size() < 2 ) { // Ignore the last one
+                throw std::runtime_error("torch::from must be provided with C array and its shape.");
+            }
+
+            ASR::dimension_t* m_dims = nullptr;
+            size_t n_dims = ASRUtils::extract_dimensions_from_ttype(ASRUtils::expr_type(args.p[0]), m_dims);
+            if( ASR::is_a<ASR::ArrayConstant_t>(*args.p[1]) ) {
+                ASR::ArrayConstant_t* array_constant = ASR::down_cast<ASR::ArrayConstant_t>(args.p[1]);
+
+                Vec<ASR::dimension_t> empty_dims; empty_dims.reserve(al, array_constant->n_args);
+                for( size_t idim = 0; idim < array_constant->n_args; idim++ ) {
+                    if( !ASRUtils::is_value_equal(array_constant->m_args[idim], m_dims[idim].m_length) ) {
+                        throw std::runtime_error("ICE: Could not decipher the equality of the shape "
+                            "and shape of the array provided in torch::from_blob");
+                    }
+                }
+                tmp = reinterpret_cast<ASR::asr_t*>(args.p[0]);
+                is_stmt_created = false;
+            } else {
+                throw std::runtime_error("Only {...} is allowed for supplying shape to torch::from_blob.");
             }
         } else if (sf == SpecialFunc::Iota) {
             tmp = ASR::make_ComplexConstant_t(al, Lloc(x), 0.0, 1.0,
@@ -1874,7 +2024,16 @@ public:
                 throw std::runtime_error(name + std::string(" is already defined."));
             }
         }
-        ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType());
+        Vec<ASR::dimension_t> xshape_result; xshape_result.reserve(al, 0);
+        ThirdPartyCPPArrayTypes array_type; bool is_third_party_array_type = false;
+        ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType(), &xshape_result,
+            &array_type, &is_third_party_array_type);
+        if( is_third_party_array_type &&
+            array_type == ThirdPartyCPPArrayTypes::PyTorchArray ) {
+            if( !x->hasInit() ) {
+                throw std::runtime_error("torch::Tensor variables must have initialiser value.");
+            }
+        }
         ASR::symbol_t *v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
             current_scope, s2c(al, name), nullptr, 0, ASR::intentType::Local, nullptr, nullptr,
             ASR::storage_typeType::Default, asr_type, nullptr, ASR::abiType::Source,
@@ -1905,6 +2064,38 @@ public:
                     variable_t->m_value = ASRUtils::expr_value(init_val);
                     variable_t->m_storage = ASR::storage_typeType::Parameter;
                 } else {
+                    if( is_third_party_array_type ) {
+                        if( array_type == ThirdPartyCPPArrayTypes::PyTorchArray ) {
+                            ASR::dimension_t* dims = nullptr;
+                            size_t n_dims = ASRUtils::extract_dimensions_from_ttype(
+                                ASRUtils::expr_type(init_val), dims);
+
+                            Vec<ASR::dimension_t> empty_dims; empty_dims.reserve(al, n_dims);
+                            for( size_t dimi = 0; dimi < n_dims; dimi++ ) {
+                                ASR::dimension_t empty_dim;
+                                empty_dim.loc = Lloc(x);
+                                empty_dim.m_start = ASRUtils::get_constant_zero_with_given_type(
+                                    al, ASRUtils::TYPE(ASR::make_Integer_t(al, Lloc(x), 4)));
+                                empty_dim.m_length = nullptr;
+                                empty_dims.push_back(al, empty_dim);
+                            }
+                            ASR::Variable_t* variable_t = ASR::down_cast<ASR::Variable_t>(v);
+                            variable_t->m_type = ASRUtils::TYPE(ASR::make_Array_t(al, Lloc(x),
+                                ASRUtils::extract_type(variable_t->m_type), empty_dims.p, empty_dims.size(),
+                                ASR::array_physical_typeType::DescriptorArray));
+                            variable_t->m_type = ASRUtils::TYPE(ASR::make_Allocatable_t(
+                                al, Lloc(x), variable_t->m_type));
+
+                            Vec<ASR::alloc_arg_t> alloc_args; alloc_args.reserve(al, 1);
+                            ASR::alloc_arg_t alloc_arg; alloc_arg.loc = Lloc(x);
+                            alloc_arg.m_a = var;
+                            alloc_arg.m_dims = dims; alloc_arg.n_dims = n_dims;
+                            alloc_arg.m_len_expr = nullptr; alloc_arg.m_type = nullptr;
+                            alloc_args.push_back(al, alloc_arg);
+                            current_body->push_back(al, ASRUtils::STMT(ASR::make_Allocate_t(
+                                al, Lloc(x), alloc_args.p, alloc_args.size(), nullptr, nullptr, nullptr)));
+                        }
+                    }
                     add_reshape_if_needed(init_val, var);
                     tmp = ASR::make_Assignment_t(al, Lloc(x), var, init_val, nullptr);
                     is_stmt_created = true;
@@ -2153,10 +2344,10 @@ public:
     void CreateBinOp(ASR::expr_t* lhs, ASR::expr_t* rhs,
         ASR::binopType binop_type, const Location& loc) {
         cast_helper(lhs, rhs, false);
+        ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
         ASR::ttype_t* result_type = ASRUtils::type_get_past_const(
             ASRUtils::type_get_past_allocatable(
                 ASRUtils::type_get_past_pointer(ASRUtils::expr_type(lhs))));
-        ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
         if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
             ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
@@ -2465,6 +2656,10 @@ public:
 
     bool TraverseDeclRefExpr(clang::DeclRefExpr* x) {
         std::string name = x->getNameInfo().getAsString();
+        std::string namespace_name = "";
+        if( x->getQualifier() ) {
+            namespace_name = x->getQualifier()->getAsNamespace()->getNameAsString();
+        }
         ASR::symbol_t* sym = resolve_symbol(name);
         if( name == "operator<<" || name == "cout" || name == "endl" ||
             name == "operator()" || name == "operator+" || name == "operator=" ||
@@ -2476,7 +2671,8 @@ public:
             name == "range" || name == "pow" || name == "equal" ||
             name == "operator<" || name == "operator<=" || name == "operator>=" ||
             name == "operator!=" || name == "operator\"\"i" || name == "sin" ||
-            name == "cos" || name == "amin" || name == "operator[]" || name == "sqrt" ) {
+            name == "cos" || name == "amin" || name == "operator[]" || name == "sqrt" ||
+            name == "ones" || name == "from_blob" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
@@ -2484,6 +2680,8 @@ public:
             if( sym == nullptr ) {
                 if( name == "full_extent" ) {
                     is_all_called = true;
+                } else if(namespace_name == "torch") {
+                    cxx_operator_name_obj.set(namespace_name + "::" + name);
                 } else {
                     cxx_operator_name_obj.set(name);
                 }
