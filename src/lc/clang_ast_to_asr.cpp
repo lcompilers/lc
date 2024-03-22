@@ -47,6 +47,8 @@ enum SpecialFunc {
 
     TorchOnes,
     TorchEmpty,
+    TorchFromBlob,
+    TorchTensorItem,
 };
 
 std::map<std::string, SpecialFunc> special_function_map = {
@@ -83,6 +85,10 @@ std::map<std::string, SpecialFunc> special_function_map = {
 
     {"torch::ones", SpecialFunc::TorchOnes},
     {"torch::empty", SpecialFunc::TorchEmpty},
+    {"torch::from_blob", SpecialFunc::TorchFromBlob},
+    {"torch::abs", SpecialFunc::Abs},
+    {"torch::any", SpecialFunc::Any},
+    {"item", SpecialFunc::TorchTensorItem},
 };
 
 class OneTimeUseString {
@@ -1159,6 +1165,9 @@ public:
             func_name = std::string(ASRUtils::symbol_name(callee_Var->m_v));
         }
         if (special_function_map.find(func_name) == special_function_map.end()) {
+            if( current_scope->resolve_symbol(func_name) == nullptr ) {
+                throw std::runtime_error("ICE: " + func_name + " is not handled yet in LC.");
+            }
             return false;
         }
         SpecialFunc sf = special_function_map[func_name];
@@ -1357,6 +1366,16 @@ public:
             ASRUtils::make_ArrayBroadcast_t_util(al, Lloc(x), callee, arg);
             tmp = ASR::make_Assignment_t(al, Lloc(x), callee, arg, nullptr);
             is_stmt_created = true;
+        } else if (sf == SpecialFunc::TorchTensorItem) {
+            if( args.size() != 0 ) {
+                throw std::runtime_error("torch::Tensor::item shouldn't be called with any argument.");
+            }
+            if( ASRUtils::is_array(ASRUtils::expr_type(callee)) ) {
+                throw std::runtime_error("Callee of torch::Tensor::item should be a scalar.");
+            }
+
+            tmp = reinterpret_cast<ASR::asr_t*>(callee);
+            is_stmt_created = false;
         } else if (sf == SpecialFunc::TorchOnes) {
             if( args.size() != 2 ) { // second one is TorchOptions, to be ignored
                 throw std::runtime_error("torch::ones should be called with only one argument.");
@@ -1551,6 +1570,28 @@ public:
                 is_stmt_created = false;
             } else {
                 throw std::runtime_error("Only {...} is allowed for supplying shape to xt::empty.");
+            }
+        } else if (sf == SpecialFunc::TorchFromBlob) {
+            if( args.size() < 2 ) { // Ignore the last one
+                throw std::runtime_error("torch::from must be provided with C array and its shape.");
+            }
+
+            ASR::dimension_t* m_dims = nullptr;
+            size_t n_dims = ASRUtils::extract_dimensions_from_ttype(ASRUtils::expr_type(args.p[0]), m_dims);
+            if( ASR::is_a<ASR::ArrayConstant_t>(*args.p[1]) ) {
+                ASR::ArrayConstant_t* array_constant = ASR::down_cast<ASR::ArrayConstant_t>(args.p[1]);
+
+                Vec<ASR::dimension_t> empty_dims; empty_dims.reserve(al, array_constant->n_args);
+                for( size_t idim = 0; idim < array_constant->n_args; idim++ ) {
+                    if( !ASRUtils::is_value_equal(array_constant->m_args[idim], m_dims[idim].m_length) ) {
+                        throw std::runtime_error("ICE: Could not decipher the equality of the shape "
+                            "and shape of the array provided in torch::from_blob");
+                    }
+                }
+                tmp = reinterpret_cast<ASR::asr_t*>(args.p[0]);
+                is_stmt_created = false;
+            } else {
+                throw std::runtime_error("Only {...} is allowed for supplying shape to torch::from_blob.");
             }
         } else if (sf == SpecialFunc::Iota) {
             tmp = ASR::make_ComplexConstant_t(al, Lloc(x), 0.0, 1.0,
@@ -2631,7 +2672,7 @@ public:
             name == "operator<" || name == "operator<=" || name == "operator>=" ||
             name == "operator!=" || name == "operator\"\"i" || name == "sin" ||
             name == "cos" || name == "amin" || name == "operator[]" || name == "sqrt" ||
-            name == "ones" ) {
+            name == "ones" || name == "from_blob" ) {
             if( sym != nullptr && ASR::is_a<ASR::Function_t>(
                     *ASRUtils::symbol_get_past_external(sym)) ) {
                 throw std::runtime_error("Special function " + name + " cannot be overshadowed yet.");
