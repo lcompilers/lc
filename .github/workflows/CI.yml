@@ -94,3 +94,5 @@ jobs:
             cp -r $CONDA_PREFIX/lib/python3.12/site-packages/torch/lib/* $CONDA_PREFIX/lib/
             cp -r $CONDA_PREFIX/lib/python3.12/site-packages/torch/share/* $CONDA_PREFIX/share/
             ./integration_tests/run_tests.py -b pytorch
+            export CPATH=$CPATH:$CONDA_PREFIX/include/torch/csrc/api/include
+            ./integration_tests/run_tests.py -b llvmPytorch
