@@ -6,7 +6,7 @@ define i32 @f(i32* %x) {
   %__return_var = alloca i32, align 4
   %result = alloca i32, align 4
   %0 = load i32, i32* %x, align 4
-  %1 = udiv i32 %0, 42
+  %1 = sdiv i32 %0, 42
   store i32 %1, i32* %result, align 4
   %2 = load i32, i32* %result, align 4
   store i32 %2, i32* %__return_var, align 4

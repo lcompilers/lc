@@ -145,7 +145,7 @@
                         ()
                         ()
                     )
-                    (=
+                    (Assignment
                         (Var 2 arr1)
                         (ArrayReshape
                             (ArrayConstant
@@ -194,7 +194,7 @@
                                 RowMajor
                             )
                             (ArrayPhysicalCast
-                                (ArrayConstant
+                                (ArrayConstructor
                                     [(ArraySize
                                         (Var 2 arr1)
                                         (IntegerConstant 1 (Integer 4))
@@ -213,6 +213,7 @@
                                         (IntegerConstant 2 (Integer 4)))]
                                         FixedSizeArray
                                     )
+                                    ()
                                     RowMajor
                                 )
                                 FixedSizeArray
@@ -247,7 +248,7 @@
                         ()
                         ()
                     )
-                    (=
+                    (Assignment
                         (Var 2 arr2)
                         (ArrayConstant
                             [(RealConstant
@@ -272,7 +273,7 @@
                         )
                         ()
                     )
-                    (=
+                    (Assignment
                         (Var 2 res_)
                         (ArrayConstant
                             [(RealConstant
@@ -307,7 +308,7 @@
                         ()
                         ()
                     )
-                    (=
+                    (Assignment
                         (Var 2 res)
                         (RealBinOp
                             (ArraySection
@@ -399,7 +400,7 @@
                         (IntrinsicArrayFunction
                             Any
                             [(RealCompare
-                                (IntrinsicScalarFunction
+                                (IntrinsicElementalFunction
                                     Abs
                                     [(RealBinOp
                                         (Var 2 res)
@@ -430,7 +431,7 @@
                                     )
                                     (IntrinsicArrayFunction
                                         Shape
-                                        [(IntrinsicScalarFunction
+                                        [(IntrinsicElementalFunction
                                             Abs
                                             [(RealBinOp
                                                 (Var 2 res)
@@ -452,8 +453,7 @@
                                                 DescriptorArray
                                             )
                                             ()
-                                        )
-                                        (IntegerConstant 4 (Integer 4))]
+                                        )]
                                         0
                                         (Array
                                             (Integer 4)
@@ -488,7 +488,7 @@
                         )]
                         []
                     )
-                    (=
+                    (Assignment
                         (Var 2 __return_var)
                         (IntegerConstant 0 (Integer 4))
                         ()
@@ -524,7 +524,7 @@
                         })
                     main_program
                     [main]
-                    [(=
+                    [(Assignment
                         (Var 3 exit_code)
                         (FunctionCall
                             1 main
