@@ -34,6 +34,8 @@ src/libasr/wasm_visitor.h
 src/libasr/config.h
 fa
 fa2
+c_o
+llvm_o
 */bin/lc
 *vscode*
 integration_tests/test-*
