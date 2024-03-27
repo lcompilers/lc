@@ -117,23 +117,25 @@ public:
                 }
                 sub += indent + std::string(v_m_name) + "->data = " + std::string(v_m_name) + "_data;\n";
                 sub += indent + std::string(v_m_name) + "->n_dims = " + std::to_string(n_dims) + ";\n";
-                for (int i = 0; i < n_dims; i++) {
+                sub += indent + std::string(v_m_name) + "->offset = " + std::to_string(0) + ";\n";
+                std::string stride = "1";
+                for (int i = n_dims - 1; i >= 0; i--) {
+                    std::string start = "1", length = "0";
                     if( m_dims[i].m_start ) {
                         this->visit_expr(*m_dims[i].m_start);
-                        sub += indent + std::string(v_m_name) +
-                            "->dims[" + std::to_string(i) + "].lower_bound = " + src + ";\n";
-                    } else {
-                        sub += indent + std::string(v_m_name) +
-                            "->dims[" + std::to_string(i) + "].lower_bound = 0" + ";\n";
+                        start = src;
                     }
                     if( m_dims[i].m_length ) {
                         this->visit_expr(*m_dims[i].m_length);
-                        sub += indent + std::string(v_m_name) +
-                            "->dims[" + std::to_string(i) + "].length = " + src + ";\n";
-                    } else {
-                        sub += indent + std::string(v_m_name) +
-                            "->dims[" + std::to_string(i) + "].length = 0" + ";\n";
+                        length = src;
                     }
+                    sub += indent + std::string(v_m_name) +
+                        "->dims[" + std::to_string(i) + "].lower_bound = " + start + ";\n";
+                    sub += indent + std::string(v_m_name) +
+                        "->dims[" + std::to_string(i) + "].length = " + length + ";\n";
+                    sub += indent + std::string(v_m_name) +
+                        "->dims[" + std::to_string(i) + "].stride = " + stride + ";\n";
+                    stride = "(" + stride + "*" + length + ")";
                 }
                 sub.pop_back();
                 sub.pop_back();
@@ -281,9 +283,7 @@ public:
         v_m_type = ASRUtils::type_get_past_array(ASRUtils::type_get_past_allocatable(v_m_type));
         if (ASRUtils::is_pointer(v_m_type)) {
             ASR::ttype_t *t2 = ASR::down_cast<ASR::Pointer_t>(v_m_type)->m_type;
-            // TODO: const type in the below line should be ideally
-            // incorporated in the generated c data type.
-            t2 = ASRUtils::type_get_past_const(ASRUtils::type_get_past_array(t2));
+            t2 = ASRUtils::type_get_past_array(t2);
             if (ASRUtils::is_integer(*t2)) {
                 ASR::Integer_t *t = ASR::down_cast<ASR::Integer_t>(ASRUtils::type_get_past_array(t2));
                 std::string type_name = "int" + std::to_string(t->m_kind * 8) + "_t";
@@ -365,10 +365,6 @@ public:
                     std::string dims = convert_dims_c(n_dims, m_dims, v_m_type, is_fixed_size);
                     sub = format_type_c(dims, type_name, v.m_name, use_ref, dummy);
                 }
-            } else if (ASRUtils::is_character(*t2)) {
-                bool is_fixed_size = true;
-                std::string dims = convert_dims_c(n_dims, m_dims, v_m_type, is_fixed_size);
-                sub = format_type_c(dims, "char *", v.m_name, use_ref, dummy);
             } else if(ASR::is_a<ASR::Struct_t>(*t2)) {
                 ASR::Struct_t *t = ASR::down_cast<ASR::Struct_t>(t2);
                 std::string der_type_name = ASRUtils::symbol_name(t->m_derived_type);
@@ -419,11 +415,6 @@ public:
                 headers.insert("complex.h");
                 convert_variable_decl_util(v, is_array, declare_as_constant, use_ref, dummy,
                     force_declare, force_declare_name, n_dims, m_dims, v_m_type, dims, sub);
-            } else if (ASR::is_a<ASR::SymbolicExpression_t>(*v_m_type)) {
-                headers.insert("symengine/cwrapper.h");
-                std::string type_name = "basic";
-                std::string v_m_name = v.m_name;
-                sub = format_type_c("", type_name, v_m_name, use_ref, dummy);
             } else if (ASRUtils::is_logical(*v_m_type)) {
                 convert_variable_decl_util(v, is_array, declare_as_constant, use_ref, dummy,
                     force_declare, force_declare_name, n_dims, m_dims, v_m_type, dims, sub);
@@ -533,7 +524,11 @@ public:
             } else if (ASR::is_a<ASR::List_t>(*v_m_type)) {
                 ASR::List_t* t = ASR::down_cast<ASR::List_t>(v_m_type);
                 std::string list_type_c = c_ds_api->get_list_type(t);
-                sub = format_type_c("", list_type_c, v.m_name,
+                std::string name = v.m_name;
+                if (v.m_intent == ASRUtils::intent_out) {
+                    name = "*" + name;
+                }
+                sub = format_type_c("", list_type_c, name,
                                     false, false);
             } else if (ASR::is_a<ASR::Tuple_t>(*v_m_type)) {
                 ASR::Tuple_t* t = ASR::down_cast<ASR::Tuple_t>(v_m_type);
@@ -1122,21 +1117,25 @@ R"(    // Initialise Numpy
             ASR::dimension_t* m_dims = nullptr;
             int n_dims = ASRUtils::extract_dimensions_from_ttype(ASRUtils::expr_type(x.m_ptr), m_dims);
             dim_set_code = indent + dest_src + "->n_dims = " + std::to_string(n_dims) + ";\n";
-            for( int i = 0; i < n_dims; i++ ) {
+            dim_set_code = indent + dest_src + "->offset = 0;\n";
+            std::string stride = "1";
+            for (int i = n_dims - 1; i >= 0; i--) {
+                std::string start = "0", length = "0";
                 if( lower_bounds ) {
                     visit_expr(*lower_bounds->m_args[i]);
-                } else {
-                    src = "0";
+                    start = src;
                 }
-                dim_set_code += indent + dest_src + "->dims[" +
-                    std::to_string(i) + "].lower_bound = " + src + ";\n";
                 if( m_dims[i].m_length ) {
-                    visit_expr(*m_dims[i].m_length);
-                } else {
-                    src = "0";
+                    this->visit_expr(*m_dims[i].m_length);
+                    length = src;
                 }
-                dim_set_code += indent + dest_src + "->dims[" +
-                    std::to_string(i) + "].length = " + src + ";\n";
+                dim_set_code += indent + dest_src +
+                    "->dims[" + std::to_string(i) + "].lower_bound = " + start + ";\n";
+                dim_set_code += indent + dest_src +
+                    "->dims[" + std::to_string(i) + "].length = " + length + ";\n";
+                dim_set_code += indent + dest_src +
+                    "->dims[" + std::to_string(i) + "].stride = " + stride + ";\n";
+                stride = "(" + stride + "*" + length + ")";
             }
             src.clear();
             src += dim_set_code;
@@ -1210,7 +1209,7 @@ R"(    // Initialise Numpy
         src = this->check_tmp_buffer() + out;
     }
 
-    void visit_ArrayBroadcast(const ASR::ArrayBroadcast_t& x) {
+    void visit_ArrayBroadcast(const ASR::ArrayBroadcast_t &x) {
         /*
             !LF$ attributes simd :: A
             real :: A(8)
@@ -1218,24 +1217,15 @@ R"(    // Initialise Numpy
             We need to generate:
             a = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
         */
-
-        CHECK_FAST_C(compiler_options, x)
-        if (x.m_value) {
-            ASR::expr_t* value = x.m_value;
-            LCOMPILERS_ASSERT(ASR::is_a<ASR::ArrayConstant_t>(*value));
-            ASR::ArrayConstant_t* array_const = ASR::down_cast<ASR::ArrayConstant_t>(value);
-            std::string array_const_str = "{";
-            for( size_t i = 0; i < array_const->n_args; i++ ) {
-                ASR::expr_t* array_const_arg = array_const->m_args[i];
-                this->visit_expr(*array_const_arg);
-                array_const_str += src + ", ";
-            }
-            array_const_str.pop_back();
-            array_const_str.pop_back();
-            array_const_str += "}";
-
-            src = array_const_str;
+        size_t size = ASRUtils::get_fixed_size_of_array(x.m_type);
+        std::string array_const_str = "{";
+        for( size_t i = 0; i < size; i++ ) {
+            this->visit_expr(*x.m_array);
+            array_const_str += src;
+            if (i < size - 1) array_const_str += ", ";
         }
+        array_const_str += "}";
+        src = array_const_str;
     }
 
     void visit_ArraySize(const ASR::ArraySize_t& x) {
@@ -1288,12 +1278,21 @@ R"(    // Initialise Numpy
         visit_expr(*x.m_dim);
         std::string idx = src;
         if( x.m_bound == ASR::arrayboundType::LBound ) {
-            src = "((" + result_type + ")" + var_name + "->dims[" + idx + "-1].lower_bound)";
+            if (ASRUtils::is_simd_array(x.m_v)) {
+                src = "0";
+            } else {
+                src = "((" + result_type + ")" + var_name + "->dims[" + idx + "-1].lower_bound)";
+            }
         } else if( x.m_bound == ASR::arrayboundType::UBound ) {
-            std::string lower_bound = var_name + "->dims[" + idx + "-1].lower_bound";
-            std::string length = var_name + "->dims[" + idx + "-1].length";
-            std::string upper_bound = length + " + " + lower_bound + " - 1";
-            src = "((" + result_type + ") " + upper_bound + ")";
+            if (ASRUtils::is_simd_array(x.m_v)) {
+                int64_t size = ASRUtils::get_fixed_size_of_array(ASRUtils::expr_type(x.m_v));
+                src = std::to_string(size - 1);
+            } else {
+                std::string lower_bound = var_name + "->dims[" + idx + "-1].lower_bound";
+                std::string length = var_name + "->dims[" + idx + "-1].length";
+                std::string upper_bound = length + " + " + lower_bound + " - 1";
+                src = "((" + result_type + ") " + upper_bound + ")";
+            }
         }
     }
 
@@ -1321,51 +1320,86 @@ R"(    // Initialise Numpy
         CHECK_FAST_C(compiler_options, x)
         this->visit_expr(*x.m_v);
         std::string array = src;
-        std::string out = array;
         ASR::ttype_t* x_mv_type = ASRUtils::expr_type(x.m_v);
         ASR::dimension_t* m_dims;
         int n_dims = ASRUtils::extract_dimensions_from_ttype(x_mv_type, m_dims);
         bool is_data_only_array = ASRUtils::is_fixed_size_array(m_dims, n_dims) &&
                                   ASR::is_a<ASR::StructType_t>(*ASRUtils::get_asr_owner(x.m_v));
-        if( is_data_only_array ) {
+        if( is_data_only_array || ASRUtils::is_simd_array(x.m_v)) {
+            std::string index = "";
+            std::string out = array;
             out += "[";
-        } else {
-            out += "->data[";
-        }
-        std::string index = "";
-        for (size_t i=0; i<x.n_args; i++) {
-            std::string current_index = "";
-            if (x.m_args[i].m_right) {
-                this->visit_expr(*x.m_args[i].m_right);
-            } else {
-                src = "/* FIXME right index */";
-            }
+            for (size_t i=0; i<x.n_args; i++) {
+                if (x.m_args[i].m_right) {
+                    this->visit_expr(*x.m_args[i].m_right);
+                } else {
+                    src = "/* FIXME right index */";
+                }
 
-            if( is_data_only_array ) {
-                current_index += src;
-                for( size_t j = i + 1; j < x.n_args; j++ ) {
-                    int64_t dim_size = 0;
-                    ASRUtils::extract_value(m_dims[j].m_length, dim_size);
-                    std::string length = std::to_string(dim_size);
-                    current_index += " * " + length;
+                if (ASRUtils::is_simd_array(x.m_v)) {
+                    index += src;
+                } else {
+                    std::string current_index = "";
+                    current_index += src;
+                    for( size_t j = 0; j < i; j++ ) {
+                        int64_t dim_size = 0;
+                        ASRUtils::extract_value(m_dims[j].m_length, dim_size);
+                        std::string length = std::to_string(dim_size);
+                        current_index += " * " + length;
+                    }
+                    index += current_index;
                 }
-                index += current_index;
-            } else {
-                current_index += "(" + src + " - " + array + "->dims["
-                                    + std::to_string(i) + "].lower_bound)";
-                for( size_t j = i + 1; j < x.n_args; j++ ) {
-                    std::string length = array + "->dims[" + std::to_string(j) + "].length";
-                    current_index += " * " + length;
+                if (i < x.n_args - 1) {
+                    index += " + ";
                 }
-                index += current_index;
             }
-            if (i < x.n_args - 1) {
-                index += " + ";
+            out += index + "]";
+            last_expr_precedence = 2;
+            src = out;
+            return;
+        }
+
+        std::vector<std::string> indices;
+        for( size_t r = 0; r < x.n_args; r++ ) {
+            ASR::array_index_t curr_idx = x.m_args[r];
+            this->visit_expr(*curr_idx.m_right);
+            indices.push_back(src);
+        }
+
+        ASR::ttype_t* x_mv_type_ = ASRUtils::type_get_past_allocatable(
+                ASRUtils::type_get_past_pointer(ASRUtils::type_get_past_const(x_mv_type)));
+        LCOMPILERS_ASSERT(ASR::is_a<ASR::Array_t>(*x_mv_type_));
+        ASR::Array_t* array_t = ASR::down_cast<ASR::Array_t>(x_mv_type_);
+        std::vector<std::string> diminfo;
+        if( array_t->m_physical_type == ASR::array_physical_typeType::PointerToDataArray ||
+                array_t->m_physical_type == ASR::array_physical_typeType::FixedSizeArray ) {
+            for( size_t idim = 0; idim < x.n_args; idim++ ) {
+                this->visit_expr(*m_dims[idim].m_start);
+                diminfo.push_back(src);
+                this->visit_expr(*m_dims[idim].m_length);
+                diminfo.push_back(src);
+            }
+        } else if( array_t->m_physical_type == ASR::array_physical_typeType::UnboundedPointerToDataArray ) {
+            for( size_t idim = 0; idim < x.n_args; idim++ ) {
+                this->visit_expr(*m_dims[idim].m_start);
+                diminfo.push_back(src);
             }
         }
-        out += index + "]";
+
+        LCOMPILERS_ASSERT(ASRUtils::extract_n_dims_from_ttype(x_mv_type) > 0);
+        if (array_t->m_physical_type == ASR::array_physical_typeType::UnboundedPointerToDataArray) {
+            src = arr_get_single_element(array, indices, x.n_args,
+                                                true,
+                                                false,
+                                                diminfo,
+                                                true);
+        } else {
+            src = arr_get_single_element(array, indices, x.n_args,
+                                                array_t->m_physical_type == ASR::array_physical_typeType::PointerToDataArray,
+                                                array_t->m_physical_type == ASR::array_physical_typeType::FixedSizeArray,
+                                                diminfo, false);
+        }
         last_expr_precedence = 2;
-        src = out;
     }
 
     void visit_StringItem(const ASR::StringItem_t& x) {
