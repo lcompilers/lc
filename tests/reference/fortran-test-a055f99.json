@@ -5,8 +5,8 @@
     "infile_hash": "9e5ef4c37b7e9e1f13f0082ce65459c1e596430887537eb8fd656b77",
     "outfile": null,
     "outfile_hash": null,
-    "stdout": "fortran-test-a055f99.stdout",
-    "stdout_hash": "2f2dc8c461a0bfd018dacc50ff66fb073fa6c3df9ddaac3d3a3f723c",
+    "stdout": null,
+    "stdout_hash": null,
     "stderr": null,
     "stderr_hash": null,
     "returncode": 0

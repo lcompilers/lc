@@ -859,7 +859,6 @@ class ASRToWASMVisitor : public ASR::BaseVisitor<ASRToWASMVisitor> {
         if (ASRUtils::is_pointer(v->m_type)) {
             ASR::ttype_t *t2 =
                 ASR::down_cast<ASR::Pointer_t>(v->m_type)->m_type;
-            t2 = ASRUtils::type_get_past_const(t2);
             if (ASRUtils::is_integer(*t2)) {
                 ASR::Integer_t *t = ASR::down_cast<ASR::Integer_t>(t2);
                 diag.codegen_warning_label(
@@ -872,17 +871,6 @@ class ASRToWASMVisitor : public ASR::BaseVisitor<ASRToWASMVisitor> {
                 } else {
                     throw CodeGenError(
                         "Integers of kind 4 and 8 only supported");
-                }
-            } else if (ASRUtils::is_character(*t2)) {
-                ASR::Character_t *t = ASR::down_cast<ASR::Character_t>(t2);
-                diag.codegen_warning_label(
-                    "Pointers are not currently supported", {v->base.base.loc},
-                    "emitting integer for now");
-                if (t->m_kind == 1) {
-                    type_vec.push_back(i32);
-                } else {
-                    throw CodeGenError(
-                        "Characters of kind 1 only supported");
                 }
             } else {
                 diag.codegen_error_label("Type number '" +
@@ -2446,12 +2434,12 @@ class ASRToWASMVisitor : public ASR::BaseVisitor<ASRToWASMVisitor> {
         if (m_func_name_idx_map.find(hash) != m_func_name_idx_map.end()) {
             m_wa.emit_call(m_func_name_idx_map[hash].index);
         } else {
-            if (strcmp(fn->m_name, "c_caimag") == 0) {
+            if (strcmp(fn->m_name, "_lfortran_caimag") == 0) {
                 LCOMPILERS_ASSERT(x.n_args == 1);
                 m_wa.emit_global_set(m_compiler_globals[tmp_reg_f32]);
                 m_wa.emit_drop();
                 m_wa.emit_global_get(m_compiler_globals[tmp_reg_f32]);
-            } else if (strcmp(fn->m_name, "c_zaimag") == 0) {
+            } else if (strcmp(fn->m_name, "_lfortran_zaimag") == 0) {
                 m_wa.emit_global_set(m_compiler_globals[tmp_reg_f64]);
                 m_wa.emit_drop();
                 m_wa.emit_global_get(m_compiler_globals[tmp_reg_f64]);
@@ -3207,6 +3195,10 @@ class ASRToWASMVisitor : public ASR::BaseVisitor<ASRToWASMVisitor> {
             m_wa.emit_i32_const(1);  // non-zero exit code
             wasm_exit();
         });
+    }
+
+    void visit_TypeInquiry(const ASR::TypeInquiry_t &x) {
+        this->visit_expr(*x.m_value);
     }
 };
 

@@ -132,8 +132,13 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                     head.m_end = result_ubound[j];
                     head.m_increment = result_inc[j];
                 } else {
-                    head.m_start = PassUtils::get_bound(result_var, i + 1, "lbound", al);
-                    head.m_end = PassUtils::get_bound(result_var, i + 1, "ubound", al);
+                    ASR::expr_t* var = result_var;
+                    if (ASR::is_a<ASR::ComplexConstructor_t>(*result_var)) {
+                        ASR::ComplexConstructor_t* cc = ASR::down_cast<ASR::ComplexConstructor_t>(result_var);
+                        var = cc->m_re;
+                    }
+                    head.m_start = PassUtils::get_bound(var, i + 1, "lbound", al);
+                    head.m_end = PassUtils::get_bound(var, i + 1, "ubound", al);
                     head.m_increment = nullptr;
                 }
                 head.loc = head.m_v->base.loc;
@@ -171,10 +176,15 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                         doloop_body.push_back(al, assign_stmt2);
                     }
                 }
-                doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size()));
+                doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size(), nullptr, 0));
             }
             if( var_rank > 0 ) {
-                ASR::expr_t* idx_lb = PassUtils::get_bound(op_expr1, 1, "lbound", al);
+                ASR::expr_t* expr = op_expr1;
+                if (ASR::is_a<ASR::ComplexConstructor_t>(*op_expr1)) {
+                    ASR::ComplexConstructor_t* cc = ASR::down_cast<ASR::ComplexConstructor_t>(op_expr1);
+                    expr = cc->m_re;
+                }
+                ASR::expr_t* idx_lb = PassUtils::get_bound(expr, 1, "lbound", al);
                 ASR::stmt_t* set_to_one = ASRUtils::STMT(ASR::make_Assignment_t(al, loc, idx_vars_value1[0], idx_lb, nullptr));
                 pass_result.push_back(al, set_to_one);
 
@@ -207,7 +217,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                 } else {
                     doloop_body.push_back(al, doloop);
                 }
-                doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size()));
+                doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size(), nullptr, 0));
             }
             pass_result.push_back(al, doloop);
         }
@@ -268,7 +278,15 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
         [=, &idx_vars_value, &idx_vars, &doloop_body]() {
             ASR::expr_t* ref = nullptr;
             if( var_rank > 0 ) {
-                ref = PassUtils::create_array_ref(*current_expr, idx_vars_value, al, current_scope);
+                if (ASR::is_a<ASR::ComplexConstructor_t>(**current_expr)) {
+                    ASR::ComplexConstructor_t* cc = ASR::down_cast<ASR::ComplexConstructor_t>(*current_expr);
+                    ASR::expr_t* re = PassUtils::create_array_ref(cc->m_re, idx_vars_value, al, current_scope);
+                    ASR::expr_t* im = PassUtils::create_array_ref(cc->m_im, idx_vars_value, al, current_scope);
+                    ref = ASRUtils::EXPR(ASR::make_ComplexConstructor_t(al, loc, re, im, cc->m_type, cc->m_value));
+                    *current_expr = ref;
+                } else {
+                    ref = PassUtils::create_array_ref(*current_expr, idx_vars_value, al, current_scope);
+                }
             } else {
                 ref = *current_expr;
             }
@@ -282,7 +300,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
         use_custom_loop_params = false;
     }
 
-    #define allocate_result_var(op_arg, op_dims_arg, op_n_dims_arg, result_var_created) if( ASR::is_a<ASR::Allocatable_t>(*ASRUtils::expr_type(result_var)) || \
+    #define allocate_result_var(op_arg, op_dims_arg, op_n_dims_arg, result_var_created, reset_bounds) if( ASR::is_a<ASR::Allocatable_t>(*ASRUtils::expr_type(result_var)) || \
         ASR::is_a<ASR::Pointer_t>(*ASRUtils::expr_type(result_var)) ) { \
         bool is_dimension_empty = false; \
         for( int i = 0; i < op_n_dims_arg; i++ ) { \
@@ -291,6 +309,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                 break; \
             } \
         } \
+        ASR::ttype_t* int32_type = ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4)); \
         Vec<ASR::alloc_arg_t> alloc_args; \
         alloc_args.reserve(al, 1); \
         if( !is_dimension_empty ) { \
@@ -310,9 +329,18 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
             for( int i = 0; i < op_n_dims_arg; i++ ) { \
                 ASR::dimension_t alloc_dim; \
                 alloc_dim.loc = loc; \
-                alloc_dim.m_start = PassUtils::get_bound(op_arg, i + 1, "lbound", al); \
-                alloc_dim.m_length = ASRUtils::compute_length_from_start_end(al, alloc_dim.m_start, \
-                    PassUtils::get_bound(op_arg, i + 1, "ubound", al)); \
+                if( reset_bounds && result_var_created ) { \
+                    alloc_dim.m_start = make_ConstantWithKind(make_IntegerConstant_t, make_Integer_t, 1, 4, loc); \
+                } else { \
+                    alloc_dim.m_start = PassUtils::get_bound(op_arg, i + 1, "lbound", al); \
+                    alloc_dim.m_start = CastingUtil::perform_casting(alloc_dim.m_start, \
+                        int32_type, al, loc); \
+                } \
+                ASR::expr_t* lbound = PassUtils::get_bound(op_arg, i + 1, "lbound", al); \
+                lbound = CastingUtil::perform_casting(lbound, int32_type, al, loc); \
+                ASR::expr_t* ubound = PassUtils::get_bound(op_arg, i + 1, "ubound", al); \
+                ubound = CastingUtil::perform_casting(ubound, int32_type, al, loc); \
+                alloc_dim.m_length = ASRUtils::compute_length_from_start_end(al, lbound, ubound); \
                 alloc_dims.push_back(al, alloc_dim); \
             } \
             ASR::alloc_arg_t alloc_arg; \
@@ -360,7 +388,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                     result_var_type, al, current_scope);
                 result_counter += 1;
                 if( allocate ) {
-                    allocate_result_var(arr_expr, arr_expr_dims, arr_expr_n_dims, true);
+                    allocate_result_var(arr_expr, arr_expr_dims, arr_expr_n_dims, true, false);
                 }
             }
 
@@ -460,7 +488,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                     al, loc, idx_vars_value[i], inc_expr, nullptr));
                 doloop_body.push_back(al, assign_stmt);
             }
-            doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size()));
+            doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size(), nullptr, 0));
         }
         if( ASRUtils::is_array(ASRUtils::expr_type(op_expr)) ) {
             ASR::expr_t* idx_lb = PassUtils::get_bound(op_expr, 1, "lbound", al);
@@ -505,7 +533,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
             } else {
                 doloop_body.push_back(al, doloop);
             }
-            doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size()));
+            doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size(), nullptr, 0));
         }
         pass_result.push_back(al, doloop);
     }
@@ -667,8 +695,9 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
         x_dims.reserve(al, x->n_args);
         const Location& loc = x->base.base.loc;
         ASRUtils::ASRBuilder builder(al, loc);
+        ASR::ttype_t* int32_type = ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4));
         ASR::expr_t* i32_one = ASRUtils::EXPR(ASR::make_IntegerConstant_t(
-            al, loc, 1, ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4))));
+            al, loc, 1, int32_type));
         Vec<ASR::dimension_t> empty_dims;
         empty_dims.reserve(al, x->n_args);
         for( size_t i = 0; i < x->n_args; i++ ) {
@@ -705,9 +734,16 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                     length_value = make_ConstantWithKind(make_IntegerConstant_t, make_Integer_t,
                         ((const_end - const_start)/const_step) + 1, 4, loc);
                 }
+
+                ASR::expr_t* m_right = x->m_args[i].m_right;
+                ASR::expr_t* m_left = x->m_args[i].m_left;
+                ASR::expr_t* m_step = x->m_args[i].m_step;
+                m_right = CastingUtil::perform_casting(m_right, int32_type, al, loc);
+                m_left = CastingUtil::perform_casting(m_left, int32_type, al, loc);
+                m_step = CastingUtil::perform_casting(m_step, int32_type, al, loc);
                 x_dim.m_length = builder.ElementalAdd(builder.ElementalDiv(
-                    builder.ElementalSub(x->m_args[i].m_right, x->m_args[i].m_left, loc),
-                    x->m_args[i].m_step, loc), i32_one, loc, length_value);
+                    builder.ElementalSub(m_right, m_left, loc),
+                    m_step, loc), i32_one, loc, length_value);
                 x_dims.push_back(al, x_dim);
             }
         }
@@ -716,16 +752,25 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
             op_n_dims = x_dims.size();
         }
 
-        ASR::ttype_t* x_m_type = ASRUtils::TYPE(ASR::make_Pointer_t(al, loc,
-            ASRUtils::type_get_past_allocatable(ASRUtils::duplicate_type(al,
-            ASRUtils::type_get_past_pointer(x->m_type), &empty_dims))));
-
+        ASR::ttype_t* x_m_type;
+        if (op_expr && ASRUtils::is_simd_array(op_expr)) {
+            x_m_type = ASRUtils::expr_type(op_expr);
+        } else {
+            x_m_type = ASRUtils::TYPE(ASR::make_Pointer_t(al, loc,
+                ASRUtils::type_get_past_allocatable(ASRUtils::duplicate_type(al,
+                ASRUtils::type_get_past_pointer(x->m_type), &empty_dims))));
+        }
         ASR::expr_t* array_section_pointer = PassUtils::create_var(
             result_counter, "_array_section_pointer_", loc,
             x_m_type, al, current_scope);
         result_counter += 1;
-        pass_result.push_back(al, ASRUtils::STMT(ASRUtils::make_Associate_t_util(
-            al, loc, array_section_pointer, *current_expr)));
+        if (op_expr && ASRUtils::is_simd_array(op_expr)) {
+            pass_result.push_back(al, ASRUtils::STMT(ASR::make_Assignment_t(
+                al, loc, array_section_pointer, *current_expr, nullptr)));
+        } else {
+            pass_result.push_back(al, ASRUtils::STMT(ASRUtils::make_Associate_t_util(
+                al, loc, array_section_pointer, *current_expr)));
+        }
         *current_expr = array_section_pointer;
 
         // Might get used in other replace_* methods as well.
@@ -740,6 +785,33 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
 
     template <typename T>
     void replace_ArrayOpCommon(T* x, std::string res_prefix) {
+        bool is_left_simd  = ASRUtils::is_simd_array(x->m_left);
+        bool is_right_simd = ASRUtils::is_simd_array(x->m_right);
+        if ( is_left_simd && is_right_simd ) {
+            return;
+        } else if ( ( is_left_simd && !is_right_simd) ||
+                    (!is_left_simd &&  is_right_simd) ) {
+            ASR::expr_t** current_expr_copy = current_expr;
+            ASR::expr_t* op_expr_copy = op_expr;
+            if (is_left_simd) {
+                // Replace ArraySection, case: a = a + b(:4)
+                if (ASR::is_a<ASR::ArraySection_t>(*x->m_right)) {
+                    current_expr = &(x->m_right);
+                    op_expr = x->m_left;
+                    this->replace_expr(x->m_right);
+                }
+            } else {
+                // Replace ArraySection, case: a = b(:4) + a
+                if (ASR::is_a<ASR::ArraySection_t>(*x->m_left)) {
+                    current_expr = &(x->m_left);
+                    op_expr = x->m_right;
+                    this->replace_expr(x->m_left);
+                }
+            }
+            current_expr = current_expr_copy;
+            op_expr = op_expr_copy;
+            return;
+        }
         const Location& loc = x->base.base.loc;
         bool current_status = use_custom_loop_params;
         use_custom_loop_params = false;
@@ -828,7 +900,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                                 result_var_type, al, current_scope);
                 result_counter += 1;
                 if( allocate ) {
-                    allocate_result_var(left, left_dims, rank_left, true);
+                    allocate_result_var(left, left_dims, rank_left, true, true);
                 }
                 new_result_var_created = true;
             }
@@ -894,7 +966,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                                 result_var_type, al, current_scope);
                 result_counter += 1;
                 if( allocate ) {
-                    allocate_result_var(arr_expr, arr_expr_dims, arr_expr_n_dims, true);
+                    allocate_result_var(arr_expr, arr_expr_dims, arr_expr_n_dims, true, true);
                 }
                 new_result_var_created = true;
             }
@@ -948,11 +1020,31 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
         if( x->m_kind == ASR::cast_kindType::ListToArray ) {
             return ;
         }
+        const Location& loc = x->base.base.loc;
+        ASR::Cast_t* x_ = x;
+        if( ASR::is_a<ASR::ArrayReshape_t>(*x->m_arg) ) {
+            *current_expr = x->m_arg;
+            ASR::ArrayReshape_t* array_reshape_t = ASR::down_cast<ASR::ArrayReshape_t>(x->m_arg);
+            ASR::array_physical_typeType array_reshape_ptype = ASRUtils::extract_physical_type(array_reshape_t->m_type);
+            Vec<ASR::dimension_t> m_dims_vec;
+            ASR::dimension_t* m_dims;
+            size_t n_dims = ASRUtils::extract_dimensions_from_ttype(ASRUtils::expr_type(array_reshape_t->m_array), m_dims);
+            m_dims_vec.from_pointer_n(m_dims, n_dims);
+            array_reshape_t->m_array = ASRUtils::EXPR(ASR::make_Cast_t(al, x->base.base.loc,
+                array_reshape_t->m_array, x->m_kind, ASRUtils::duplicate_type(al, x->m_type, &m_dims_vec,
+                    array_reshape_ptype, true), nullptr));
+            n_dims = ASRUtils::extract_dimensions_from_ttype(array_reshape_t->m_type, m_dims);
+            m_dims_vec.from_pointer_n(m_dims, n_dims);
+            array_reshape_t->m_type = ASRUtils::duplicate_type(al, x->m_type, &m_dims_vec, array_reshape_ptype, true);
+            x_ = ASR::down_cast<ASR::Cast_t>(array_reshape_t->m_array);
+            current_expr = &array_reshape_t->m_array;
+            result_var = nullptr;
+        }
         ASR::expr_t* result_var_copy = result_var;
         result_var = nullptr;
-        BaseExprReplacer::replace_Cast(x);
+        BaseExprReplacer::replace_Cast(x_);
         result_var = result_var_copy;
-        ASR::expr_t* tmp_val = x->m_arg;
+        ASR::expr_t* tmp_val = x_->m_arg;
 
         bool is_arg_array = PassUtils::is_array(tmp_val);
         bool is_result_var_array = result_var && PassUtils::is_array(result_var);
@@ -961,12 +1053,40 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
             return ;
         }
 
-        const Location& loc = x->base.base.loc;
         if( result_var == nullptr ) {
-            PassUtils::fix_dimension(x, tmp_val);
+            PassUtils::fix_dimension(x_, tmp_val);
             result_var = PassUtils::create_var(result_counter, std::string("_implicit_cast_res"),
                                                loc, *current_expr, al, current_scope);
+            ASR::dimension_t* allocate_dims = nullptr;
+            int n_dims = ASRUtils::extract_dimensions_from_ttype(x_->m_type, allocate_dims);
+            allocate_result_var(x_->m_arg, allocate_dims, n_dims, true, true);
             result_counter += 1;
+        } else {
+            ASR::ttype_t* result_var_type = ASRUtils::expr_type(result_var);
+            if( realloc_lhs && is_arg_array && ASRUtils::is_allocatable(result_var_type)) {
+                Vec<ASR::dimension_t> result_var_m_dims;
+                size_t result_var_n_dims = ASRUtils::extract_n_dims_from_ttype(result_var_type);
+                result_var_m_dims.reserve(al, result_var_n_dims);
+                ASR::alloc_arg_t result_alloc_arg;
+                result_alloc_arg.loc = loc;
+                result_alloc_arg.m_a = result_var;
+                for( size_t i = 0; i < result_var_n_dims; i++ ) {
+                    ASR::dimension_t result_var_dim;
+                    result_var_dim.loc = loc;
+                    result_var_dim.m_start = make_ConstantWithKind(
+                        make_IntegerConstant_t, make_Integer_t, 1, 4, loc);
+                    result_var_dim.m_length = ASRUtils::get_size(tmp_val, i + 1, al);
+                    result_var_m_dims.push_back(al, result_var_dim);
+                }
+                result_alloc_arg.m_dims = result_var_m_dims.p;
+                result_alloc_arg.n_dims = result_var_n_dims;
+                result_alloc_arg.m_len_expr = nullptr;
+                result_alloc_arg.m_type = nullptr;
+                Vec<ASR::alloc_arg_t> alloc_result_args; alloc_result_args.reserve(al, 1);
+                alloc_result_args.push_back(al, result_alloc_arg);
+                pass_result.push_back(al, ASRUtils::STMT(ASR::make_ReAlloc_t(
+                    al, loc, alloc_result_args.p, 1)));
+            }
         }
 
         int n_dims = PassUtils::get_rank(result_var);
@@ -982,7 +1102,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
             }
             ASR::expr_t* res = PassUtils::create_array_ref(result_var, idx_vars, al, current_scope);
             ASR::ttype_t* x_m_type = ASRUtils::duplicate_type_without_dims(
-                                        al, x->m_type, x->m_type->base.loc);
+                                        al, x_->m_type, x_->m_type->base.loc);
             ASR::expr_t* impl_cast_el_wise = ASRUtils::EXPR(ASR::make_Cast_t(
                 al, loc, ref, x->m_kind, x_m_type, nullptr));
             ASR::stmt_t* assign = ASRUtils::STMT(ASR::make_Assignment_t(al, loc, res, impl_cast_el_wise, nullptr));
@@ -991,8 +1111,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
         *current_expr = result_var;
         if( op_expr == &(x->base) ) {
             op_dims = nullptr;
-            op_n_dims = ASRUtils::extract_dimensions_from_ttype(
-                ASRUtils::expr_type(*current_expr), op_dims);
+            op_n_dims = ASRUtils::extract_dimensions_from_ttype(x->m_type, op_dims);
         }
         result_var = nullptr;
         use_custom_loop_params = false;
@@ -1060,7 +1179,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                                 loc, result_var_type, al, current_scope);
                 result_counter += 1;
                 if( allocate ) {
-                    allocate_result_var(operand, operand_dims, rank_operand, true);
+                    allocate_result_var(operand, operand_dims, rank_operand, true, true);
                 }
                 result_var_created = true;
             }
@@ -1237,14 +1356,28 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
         result_var = result_var_copy;
         bool result_var_created = false;
         if( result_var == nullptr ) {
-            result_var = PassUtils::create_var(result_counter, res_prefix,
-                            loc, *current_expr, al, current_scope);
+            if (x->m_type && !ASRUtils::is_array(x->m_type)) {
+                ASR::ttype_t* sibling_type = ASRUtils::expr_type(operand);
+                ASR::dimension_t* m_dims; int ndims;
+                PassUtils::get_dim_rank(sibling_type, m_dims, ndims);
+                ASR::ttype_t* arr_type = ASRUtils::make_Array_t_util(
+                    al, loc, x->m_type, m_dims, ndims);
+                if( ASRUtils::extract_physical_type(arr_type) ==
+                    ASR::array_physical_typeType::DescriptorArray ) {
+                    arr_type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, loc, arr_type));
+                }
+                result_var = PassUtils::create_var(result_counter, res_prefix,
+                                loc, arr_type, al, current_scope);
+            } else {
+                result_var = PassUtils::create_var(result_counter, res_prefix,
+                                loc, *current_expr, al, current_scope);
+            }
             result_counter += 1;
             operand = first_array_operand;
             ASR::dimension_t* m_dims;
             int n_dims = ASRUtils::extract_dimensions_from_ttype(
                 ASRUtils::expr_type(first_array_operand), m_dims);
-            allocate_result_var(operand, m_dims, n_dims, true);
+            allocate_result_var(operand, m_dims, n_dims, true, false);
             result_var_created = true;
         }
         *current_expr = result_var;
@@ -1287,15 +1420,18 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
         result_var = nullptr;
     }
 
-    void replace_IntrinsicScalarFunction(ASR::IntrinsicScalarFunction_t* x) {
-        if(!ASRUtils::IntrinsicScalarFunctionRegistry::is_elemental(x->m_intrinsic_id)) {
-            return ;
-        }
+    void replace_IntrinsicElementalFunction(ASR::IntrinsicElementalFunction_t* x) {
         replace_intrinsic_function(x);
     }
 
     void replace_IntrinsicArrayFunction(ASR::IntrinsicArrayFunction_t* x) {
         if(!ASRUtils::IntrinsicArrayFunctionRegistry::is_elemental(x->m_arr_intrinsic_id)) {
+            // ASR::BaseExprReplacer<ReplaceArrayOp>::replace_IntrinsicArrayFunction(x);
+            if( op_expr == &(x->base) ) {
+                op_dims = nullptr;
+                op_n_dims = ASRUtils::extract_dimensions_from_ttype(
+                    ASRUtils::expr_type(*current_expr), op_dims);
+            }
             return ;
         }
         replace_intrinsic_function(x);
@@ -1346,6 +1482,10 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                 int common_rank = 0;
                 bool are_all_rank_same = true;
                 for( size_t iarg = 0; iarg < x->n_args; iarg++ ) {
+                    if (x->m_args[iarg].m_value == nullptr) {
+                        operands.push_back(nullptr);
+                        continue;
+                    }
                     ASR::expr_t** current_expr_copy_9 = current_expr;
                     current_expr = &(x->m_args[iarg].m_value);
                     self().replace_expr(x->m_args[iarg].m_value);
@@ -1376,8 +1516,24 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                 result_var = result_var_copy;
                 bool result_var_created = false;
                 if( result_var == nullptr ) {
-                    result_var = PassUtils::create_var(result_counter, res_prefix,
-                                    loc, operand, al, current_scope);
+                    ASR::Function_t* func = ASR::down_cast<ASR::Function_t>(ASRUtils::symbol_get_past_external(x->m_name));
+                    if (func->m_return_var != nullptr && !ASRUtils::is_array(ASRUtils::expr_type(func->m_return_var))) {
+                        ASR::ttype_t* sibling_type = ASRUtils::expr_type(first_array_operand);
+                        ASR::dimension_t* m_dims = nullptr; int ndims = 0;
+                        PassUtils::get_dim_rank(sibling_type, m_dims, ndims);
+                        LCOMPILERS_ASSERT(m_dims != nullptr);
+                        ASR::ttype_t* arr_type = ASRUtils::make_Array_t_util(
+                            al, loc, ASRUtils::expr_type(func->m_return_var), m_dims, ndims);
+                        if( ASRUtils::extract_physical_type(arr_type) ==
+                            ASR::array_physical_typeType::DescriptorArray ) {
+                            arr_type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, loc, arr_type));
+                        }
+                        result_var = PassUtils::create_var(result_counter, res_prefix,
+                                        loc, arr_type, al, current_scope);
+                    } else {
+                        result_var = PassUtils::create_var(result_counter, res_prefix,
+                                        loc, operand, al, current_scope);
+                    }
                     result_counter += 1;
                     result_var_created = true;
                 }
@@ -1390,7 +1546,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                 ASR::dimension_t* m_dims;
                 int n_dims = ASRUtils::extract_dimensions_from_ttype(
                     ASRUtils::expr_type(operand), m_dims);
-                allocate_result_var(operand, m_dims, n_dims, result_var_created);
+                allocate_result_var(operand, m_dims, n_dims, result_var_created, false);
                 *current_expr = result_var;
 
                 Vec<ASR::expr_t*> idx_vars, loop_vars, idx_vars_value;
@@ -1407,7 +1563,7 @@ class ReplaceArrayOp: public ASR::BaseExprReplacer<ReplaceArrayOp> {
                             ref = PassUtils::create_array_ref(operands[iarg], idx_vars_value, al, current_scope);
                         }
                         ASR::call_arg_t ref_arg;
-                        ref_arg.loc = ref->base.loc;
+                        ref_arg.loc = x->m_args[iarg].loc;
                         ref_arg.m_value = ref;
                         ref_args.push_back(al, ref_arg);
                     }
@@ -1581,6 +1737,10 @@ class ArrayOpVisitor : public ASR::CallReplacerOnExpressionsVisitor<ArrayOpVisit
                 replacer.result_var = result_var_copy;
                 remove_original_statement = false;
             } else if( x.m_value ) {
+                if( ASR::is_a<ASR::ArrayReshape_t>(*x.m_value) ) {
+                    remove_original_statement = false;
+                    return ;
+                }
                 this->visit_expr(*x.m_value);
             }
             if (x.m_overloaded) {
@@ -1589,14 +1749,25 @@ class ArrayOpVisitor : public ASR::CallReplacerOnExpressionsVisitor<ArrayOpVisit
         }
 
         void visit_Assignment(const ASR::Assignment_t &x) {
-            if (ASR::is_a<ASR::Array_t>(*ASRUtils::expr_type(x.m_target)) &&
-                ASR::down_cast<ASR::Array_t>(ASRUtils::expr_type(x.m_target))->m_physical_type
-                    == ASR::array_physical_typeType::SIMDArray) {
-                return;
+            const Location& loc = x.base.base.loc;
+            if (ASRUtils::is_simd_array(x.m_target)) {
+                size_t n_dims = 1;
+                if (ASR::is_a<ASR::ArraySection_t>(*x.m_value)) {
+                    n_dims = ASRUtils::extract_n_dims_from_ttype(
+                        ASRUtils::expr_type(down_cast<ASR::ArraySection_t>(
+                        x.m_value)->m_v));
+                }
+                if (n_dims == 1) {
+                    if (!ASR::is_a<ASR::ArrayPhysicalCast_t>(*x.m_value)) {
+                        this->visit_expr(*x.m_value);
+                    }
+                    return;
+                }
             }
             if( (ASR::is_a<ASR::Pointer_t>(*ASRUtils::expr_type(x.m_target)) &&
                 ASR::is_a<ASR::GetPointer_t>(*x.m_value)) ||
-                (ASR::is_a<ASR::ArrayConstant_t>(*x.m_value)) ) {
+                (ASR::is_a<ASR::ArrayConstant_t>(*x.m_value) ||
+                ASR::is_a<ASR::ArrayConstructor_t>(*x.m_value)) ) {
                 if( realloc_lhs && ASRUtils::is_allocatable(x.m_target)) { // Add realloc-lhs later
                     Vec<ASR::alloc_arg_t> vec_alloc;
                     vec_alloc.reserve(al, 1);
@@ -1612,11 +1783,14 @@ class ArrayOpVisitor : public ASR::CallReplacerOnExpressionsVisitor<ArrayOpVisit
                         ASRUtils::expr_type(x.m_value), m_dims);
                     Vec<ASR::dimension_t> vec_dims;
                     vec_dims.reserve(al, n_dims);
+                    ASR::ttype_t* int32_type = ASRUtils::TYPE(ASR::make_Integer_t(al, loc, 4));
                     for( size_t i = 0; i < n_dims; i++ ) {
                         ASR::dimension_t dim;
                         dim.loc = x.m_value->base.loc;
                         dim.m_start = PassUtils::get_bound(x.m_value, i + 1, "lbound", al);
                         dim.m_length = ASRUtils::get_size(x.m_value, i + 1, al);
+                        dim.m_start = CastingUtil::perform_casting(dim.m_start, int32_type, al, loc);
+                        dim.m_length = CastingUtil::perform_casting(dim.m_length, int32_type, al, loc);
                         vec_dims.push_back(al, dim);
                     }
 
@@ -1646,11 +1820,9 @@ class ArrayOpVisitor : public ASR::CallReplacerOnExpressionsVisitor<ArrayOpVisit
             if( PassUtils::is_array(x.m_target) ) {
                 replacer.result_var = x.m_target;
                 replacer.result_type = ASRUtils::expr_type(x.m_target);
-                remove_original_statement = true;
             } else if( ASR::is_a<ASR::ArraySection_t>(*x.m_target) ) {
                 ASR::ArraySection_t* array_ref = ASR::down_cast<ASR::ArraySection_t>(x.m_target);
                 replacer.result_var = array_ref->m_v;
-                remove_original_statement = true;
                 result_lbound.reserve(al, array_ref->n_args);
                 result_ubound.reserve(al, array_ref->n_args);
                 result_inc.reserve(al, array_ref->n_args);
@@ -1679,6 +1851,7 @@ class ArrayOpVisitor : public ASR::CallReplacerOnExpressionsVisitor<ArrayOpVisit
                 }
                 use_custom_loop_params = true;
             }
+            remove_original_statement = true;
 
             visit_AssignmentUtil(x);
             use_custom_loop_params = false;
@@ -1738,7 +1911,7 @@ class ArrayOpVisitor : public ASR::CallReplacerOnExpressionsVisitor<ArrayOpVisit
                             al, loc, idx_vars_value[i], inc_expr, nullptr));
                         doloop_body.push_back(al, assign_stmt);
                     }
-                    doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size()));
+                    doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size(), nullptr, 0));
                 }
                 if( var_rank > 0 ) {
                     ASR::expr_t* idx_lb = PassUtils::get_bound(op_expr, 1, "lbound", al);
@@ -1768,7 +1941,7 @@ class ArrayOpVisitor : public ASR::CallReplacerOnExpressionsVisitor<ArrayOpVisit
                     } else {
                         doloop_body.push_back(al, doloop);
                     }
-                    doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size()));
+                    doloop = ASRUtils::STMT(ASR::make_DoLoop_t(al, loc, nullptr, head, doloop_body.p, doloop_body.size(), nullptr, 0));
                 }
                 pass_result.push_back(al, doloop);
             }
@@ -1827,7 +2000,7 @@ class ArrayOpVisitor : public ASR::CallReplacerOnExpressionsVisitor<ArrayOpVisit
                             ASR::call_arg_t ref_arg; ref_arg.loc = array_item->base.loc; ref_arg.m_value = array_item;
                             ref_args.push_back(al, ref_arg);
                             ASR::stmt_t* subroutine_call = ASRUtils::STMT(ASRUtils::make_SubroutineCall_t_util(al, x.base.base.loc,
-                                                    x.m_name, x.m_original_name, ref_args.p, ref_args.n, nullptr, nullptr, false));
+                                                    x.m_name, x.m_original_name, ref_args.p, ref_args.n, nullptr, nullptr, false, ASRUtils::get_class_proc_nopass_val(x.m_name)));
                             doloop_body.push_back(al, subroutine_call);
                         });
                         remove_original_statement = true;

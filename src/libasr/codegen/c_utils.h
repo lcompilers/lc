@@ -290,6 +290,11 @@ namespace CUtils {
                 type_src = get_c_type_from_ttype_t(ptr_type->m_type) + "*";
                 break;
             }
+            case ASR::ttypeType::Const: {
+                ASR::Const_t* ptr_type = ASR::down_cast<ASR::Const_t>(t);
+                type_src = "const " + get_c_type_from_ttype_t(ptr_type->m_type);
+                break;
+            }
             case ASR::ttypeType::CPtr: {
                 type_src = "void*";
                 break;
@@ -555,6 +560,7 @@ class CCPPDSUtils {
             new_array_type = struct_name + "\n{\n    " + array_data +
                                 ";\n    struct dimension_descriptor dims[32];\n" +
                                 "    int32_t n_dims;\n"
+                                "    int32_t offset;\n"
                                 "    bool is_allocated;\n};\n";
             if( make_ptr ) {
                 type_name = struct_name + "*";

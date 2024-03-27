@@ -2,7 +2,7 @@
 #define LFORTRAN_ASR_TO_LLVM_H
 
 #include <libasr/asr.h>
-#include <libasr/codegen/c_evaluator.h>
+#include <libasr/codegen/evaluator.h>
 #include <libasr/pass/pass_manager.h>
 
 namespace LCompilers {

@@ -208,7 +208,7 @@ RUN(NAME array_10.cpp LABELS gcc llvm)
 RUN(NAME array_11.cpp LABELS gcc llvm)
 RUN(NAME array_12.cpp LABELS gcc llvm)
 RUN(NAME array_13.cpp LABELS gcc llvm)
-RUN(NAME array_14.cpp LABELS gcc llvm)
+RUN(NAME array_14.cpp LABELS gcc llvm NOFAST) # promote_allocatable_to_nonallocatable pass cannot be applied
 RUN(NAME array_15.cpp LABELS gcc llvm)
 RUN(NAME array_16.cpp LABELS gcc llvm)
 RUN(NAME array_17.cpp LABELS gcc llvm)

@@ -57,7 +57,7 @@
                     )
                     []
                     []
-                    [(=
+                    [(Assignment
                         (Var 2 x)
                         (IntegerBinOp
                             (IntegerBinOp
@@ -79,7 +79,7 @@
                         ()
                         ()
                     )
-                    (=
+                    (Assignment
                         (Var 2 __return_var)
                         (IntegerConstant 0 (Integer 4))
                         ()
@@ -115,7 +115,7 @@
                         })
                     main_program
                     [main]
-                    [(=
+                    [(Assignment
                         (Var 3 exit_code)
                         (FunctionCall
                             1 main

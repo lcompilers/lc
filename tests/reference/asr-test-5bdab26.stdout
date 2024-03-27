@@ -73,7 +73,7 @@
                     )
                     []
                     [(Var 2 x)]
-                    [(=
+                    [(Assignment
                         (Var 2 result)
                         (IntegerBinOp
                             (Var 2 x)
@@ -84,7 +84,7 @@
                         )
                         ()
                     )
-                    (=
+                    (Assignment
                         (Var 2 __return_var)
                         (Var 2 result)
                         ()

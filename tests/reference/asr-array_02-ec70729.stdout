@@ -57,7 +57,7 @@
                     )
                     [matmul_test]
                     []
-                    [(=
+                    [(Assignment
                         (Var 3 sum)
                         (FunctionCall
                             1 matmul_test
@@ -81,7 +81,7 @@
                         ()
                         ()
                     )
-                    (=
+                    (Assignment
                         (Var 3 __return_var)
                         (IntegerConstant 0 (Integer 4))
                         ()
@@ -117,7 +117,7 @@
                         })
                     main_program
                     [main]
-                    [(=
+                    [(Assignment
                         (Var 4 exit_code)
                         (FunctionCall
                             1 main
@@ -413,7 +413,7 @@
                     [(Var 2 m)
                     (Var 2 n)
                     (Var 2 nums)]
-                    [(=
+                    [(Assignment
                         (Var 2 num)
                         (IntegerConstant 0 (Integer 4))
                         ()
@@ -427,7 +427,7 @@
                             (Logical 4)
                             ()
                         )
-                        [(=
+                        [(Assignment
                             (Var 2 i)
                             (IntegerConstant 0 (Integer 4))
                             ()
@@ -441,7 +441,7 @@
                                 (Logical 4)
                                 ()
                             )
-                            [(=
+                            [(Assignment
                                 (Var 2 j)
                                 (IntegerConstant 0 (Integer 4))
                                 ()
@@ -455,7 +455,7 @@
                                     (Logical 4)
                                     ()
                                 )
-                                [(=
+                                [(Assignment
                                     (ArrayItem
                                         (Var 2 arr2d)
                                         [(()
@@ -502,7 +502,7 @@
                                     )
                                     ()
                                 )
-                                (=
+                                (Assignment
                                     (Var 2 j)
                                     (IntegerBinOp
                                         (Var 2 j)
@@ -513,8 +513,9 @@
                                     )
                                     ()
                                 )]
+                                []
                             )
-                            (=
+                            (Assignment
                                 (Var 2 i)
                                 (IntegerBinOp
                                     (Var 2 i)
@@ -525,8 +526,9 @@
                                 )
                                 ()
                             )]
+                            []
                         )
-                        (=
+                        (Assignment
                             (Var 2 num)
                             (IntegerBinOp
                                 (Var 2 num)
@@ -537,8 +539,9 @@
                             )
                             ()
                         )]
+                        []
                     )
-                    (=
+                    (Assignment
                         (Var 2 k)
                         (IntegerConstant 0 (Integer 4))
                         ()
@@ -552,7 +555,7 @@
                             (Logical 4)
                             ()
                         )
-                        [(=
+                        [(Assignment
                             (ArrayItem
                                 (Var 2 arr1d)
                                 [(()
@@ -581,7 +584,7 @@
                             )
                             ()
                         )
-                        (=
+                        (Assignment
                             (Var 2 k)
                             (IntegerBinOp
                                 (Var 2 k)
@@ -592,8 +595,9 @@
                             )
                             ()
                         )]
+                        []
                     )
-                    (=
+                    (Assignment
                         (Var 2 sum)
                         (Cast
                             (RealConstant
@@ -609,7 +613,7 @@
                         )
                         ()
                     )
-                    (=
+                    (Assignment
                         (Var 2 num1)
                         (IntegerConstant 0 (Integer 4))
                         ()
@@ -623,7 +627,7 @@
                             (Logical 4)
                             ()
                         )
-                        [(=
+                        [(Assignment
                             (Var 2 i1)
                             (IntegerConstant 0 (Integer 4))
                             ()
@@ -637,7 +641,7 @@
                                 (Logical 4)
                                 ()
                             )
-                            [(=
+                            [(Assignment
                                 (Var 2 output)
                                 (Cast
                                     (RealConstant
@@ -653,7 +657,7 @@
                                 )
                                 ()
                             )
-                            (=
+                            (Assignment
                                 (Var 2 j1)
                                 (IntegerConstant 0 (Integer 4))
                                 ()
@@ -667,7 +671,7 @@
                                     (Logical 4)
                                     ()
                                 )
-                                [(=
+                                [(Assignment
                                     (Var 2 output)
                                     (RealBinOp
                                         (Var 2 output)
@@ -706,7 +710,7 @@
                                     )
                                     ()
                                 )
-                                (=
+                                (Assignment
                                     (Var 2 j1)
                                     (IntegerBinOp
                                         (Var 2 j1)
@@ -717,8 +721,9 @@
                                     )
                                     ()
                                 )]
+                                []
                             )
-                            (=
+                            (Assignment
                                 (Var 2 sum)
                                 (RealBinOp
                                     (Var 2 sum)
@@ -729,7 +734,7 @@
                                 )
                                 ()
                             )
-                            (=
+                            (Assignment
                                 (Var 2 i1)
                                 (IntegerBinOp
                                     (Var 2 i1)
@@ -740,8 +745,9 @@
                                 )
                                 ()
                             )]
+                            []
                         )
-                        (=
+                        (Assignment
                             (Var 2 num1)
                             (IntegerBinOp
                                 (Var 2 num1)
@@ -752,8 +758,9 @@
                             )
                             ()
                         )]
+                        []
                     )
-                    (=
+                    (Assignment
                         (Var 2 __return_var)
                         (Var 2 sum)
                         ()
