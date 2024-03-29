@@ -357,7 +357,7 @@ public:
     }
 
     ASR::ttype_t* ClangTypeToASRType(const clang::QualType& qual_type,
-        Vec<ASR::dimension_t>* xshape_result=nullptr,
+        bool &is_const, Vec<ASR::dimension_t>* xshape_result=nullptr,
         ThirdPartyCPPArrayTypes* array_type=nullptr,
         bool* is_third_party_cpp_array=nullptr) {
         const clang::SplitQualType& split_qual_type = qual_type.split();
@@ -383,7 +383,7 @@ public:
         } else if( clang_type->isFloatingType() ) {
             type = ASRUtils::TYPE(ASR::make_Real_t(al, l, 8));
         } else if( clang_type->isPointerType() ) {
-            type = ClangTypeToASRType(qual_type->getPointeeType());
+            type = ClangTypeToASRType(qual_type->getPointeeType(), is_const);
             if( !ASRUtils::is_character(*type) ) {
                 type = ASRUtils::TYPE(ASR::make_Pointer_t(al, l, type));
             }
@@ -391,7 +391,7 @@ public:
             const clang::ArrayType* array_type = clang_type->getAsArrayTypeUnsafe();
             const clang::ConstantArrayType* fixed_size_array_type =
                 reinterpret_cast<const clang::ConstantArrayType*>(array_type);
-            type = ClangTypeToASRType(array_type->getElementType());
+            type = ClangTypeToASRType(array_type->getElementType(), is_const);
             llvm::APInt ap_int = fixed_size_array_type->getSize();
             uint64_t size = ap_int.getZExtValue();
             Vec<ASR::dimension_t> vec; vec.reserve(al, 1);
@@ -408,7 +408,7 @@ public:
             const clang::ArrayType* array_type = clang_type->getAsArrayTypeUnsafe();
             const clang::VariableArrayType* variable_array_type =
                 reinterpret_cast<const clang::VariableArrayType*>(array_type);
-            type = ClangTypeToASRType(array_type->getElementType());
+            type = ClangTypeToASRType(array_type->getElementType(), is_const);
             clang::Expr* expr = variable_array_type->getSizeExpr();
             TraverseStmt(expr);
             Vec<ASR::dimension_t> vec; vec.reserve(al, 1);
@@ -422,11 +422,11 @@ public:
         } else if( clang_type->getTypeClass() == clang::Type::LValueReference ) {
             const clang::LValueReferenceType* lvalue_reference_type = clang_type->getAs<clang::LValueReferenceType>();
             clang::QualType pointee_type = lvalue_reference_type->getPointeeType();
-            type = ClangTypeToASRType(pointee_type, xshape_result, array_type, is_third_party_cpp_array);
+            type = ClangTypeToASRType(pointee_type, is_const, xshape_result, array_type, is_third_party_cpp_array);
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Elaborated ) {
             const clang::ElaboratedType* elaborated_type = clang_type->getAs<clang::ElaboratedType>();
             clang::QualType desugared_type = elaborated_type->desugar();
-            type = ClangTypeToASRType(desugared_type, xshape_result, array_type, is_third_party_cpp_array);
+            type = ClangTypeToASRType(desugared_type, is_const, xshape_result, array_type, is_third_party_cpp_array);
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::TemplateSpecialization ) {
             const clang::TemplateSpecializationType* template_specialization = clang_type->getAs<clang::TemplateSpecializationType>();
             std::string template_name = template_specialization->getTemplateName().getAsTemplateDecl()->getNameAsString();
@@ -456,7 +456,7 @@ public:
                     *array_type = ThirdPartyCPPArrayTypes::XTensorArray;
                 }
                 type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
-                    ClangTypeToASRType(qual_type),
+                    ClangTypeToASRType(qual_type, is_const),
                     empty_dims.p, empty_dims.size(),
                     ASR::array_physical_typeType::DescriptorArray));
                 type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, l, type));
@@ -468,7 +468,7 @@ public:
                 const clang::QualType& qual_type = template_arguments.at(0).getAsType();
                 const clang::QualType& shape_type = template_arguments.at(1).getAsType();
                 Vec<ASR::dimension_t> xtensor_fixed_dims; xtensor_fixed_dims.reserve(al, 1);
-                ClangTypeToASRType(shape_type, &xtensor_fixed_dims, array_type, is_third_party_cpp_array);
+                ClangTypeToASRType(shape_type, is_const, &xtensor_fixed_dims, array_type, is_third_party_cpp_array);
                 // Only allocatables are made for Kokkos::mdspan
                 if( array_type && is_third_party_cpp_array ) {
                     *is_third_party_cpp_array = true;
@@ -476,7 +476,7 @@ public:
                     xshape_result->from_pointer_n(xtensor_fixed_dims.p, xtensor_fixed_dims.size());
                 }
                 type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
-                    ClangTypeToASRType(qual_type),
+                    ClangTypeToASRType(qual_type, is_const),
                     xtensor_fixed_dims.p, xtensor_fixed_dims.size(),
                     ASR::array_physical_typeType::DescriptorArray));
                 type = ASRUtils::TYPE(ASR::make_Allocatable_t(al, l, type));
@@ -488,9 +488,9 @@ public:
                 const clang::QualType& qual_type = template_arguments.at(0).getAsType();
                 const clang::QualType& shape_type = template_arguments.at(1).getAsType();
                 Vec<ASR::dimension_t> xtensor_fixed_dims; xtensor_fixed_dims.reserve(al, 1);
-                ClangTypeToASRType(shape_type, &xtensor_fixed_dims, array_type, is_third_party_cpp_array);
+                ClangTypeToASRType(shape_type, is_const, &xtensor_fixed_dims, array_type, is_third_party_cpp_array);
                 type = ASRUtils::TYPE(ASR::make_Array_t(al, l,
-                    ClangTypeToASRType(qual_type),
+                    ClangTypeToASRType(qual_type, is_const),
                     xtensor_fixed_dims.p, xtensor_fixed_dims.size(),
                     ASR::array_physical_typeType::FixedSizeArray));
             } else if( template_name == "xshape" ) {
@@ -522,7 +522,7 @@ public:
                 }
 
                 const clang::QualType& qual_type = template_arguments.at(0).getAsType();
-                ASR::ttype_t* index_type = ClangTypeToASRType(qual_type);
+                ASR::ttype_t* index_type = ClangTypeToASRType(qual_type, is_const);
                 if( !ASR::is_a<ASR::Integer_t>(*index_type) ||
                     ASRUtils::extract_kind_from_ttype_t(index_type) != 4 ) {
                     throw std::runtime_error("Only int32_t should be used for index type in Kokkos::dextents.");
@@ -551,9 +551,10 @@ public:
 
                 ASR::expr_t* zero = ASRUtils::EXPR(ASR::make_IntegerConstant_t(al, l, 0,
                     ASRUtils::TYPE(ASR::make_Integer_t(al, l, 4))));
-                const clang::QualType& index_type = template_arguments.at(0).getAsType();
-                if( !ASR::is_a<ASR::Integer_t>(*ClangTypeToASRType(index_type)) ||
-                    ASRUtils::extract_kind_from_ttype_t(ClangTypeToASRType(index_type)) != 4 ) {
+                const clang::QualType& qual_type = template_arguments.at(0).getAsType();
+                ASR::ttype_t* index_type = ClangTypeToASRType(qual_type, is_const);
+                if( !ASR::is_a<ASR::Integer_t>(*index_type) ||
+                    ASRUtils::extract_kind_from_ttype_t(index_type) != 4 ) {
                     throw std::runtime_error("Only int32_t should be used for index type in Kokkos::dextents.");
                 }
                 clang::Expr* clang_rank = template_arguments.at(1).getAsExpr();
@@ -576,7 +577,7 @@ public:
                 }
 
                 const clang::QualType& qual_type = template_arguments.at(0).getAsType();
-                ASR::ttype_t* complex_subtype = ClangTypeToASRType(qual_type, xshape_result,
+                ASR::ttype_t* complex_subtype = ClangTypeToASRType(qual_type, is_const, xshape_result,
                     array_type, is_third_party_cpp_array);
                 if( !ASRUtils::is_real(*complex_subtype) ) {
                     throw std::runtime_error(std::string("std::complex accepts only real types, found: ") +
@@ -591,7 +592,7 @@ public:
                 }
 
                 const clang::QualType& qual_type = template_arguments.at(0).getAsType();
-                ASR::ttype_t* vector_subtype = ClangTypeToASRType(qual_type, xshape_result,
+                ASR::ttype_t* vector_subtype = ClangTypeToASRType(qual_type, is_const, xshape_result,
                     array_type, is_third_party_cpp_array);
                 type = ASRUtils::TYPE(ASR::make_List_t(al, l, vector_subtype));
             } else {
@@ -627,7 +628,7 @@ public:
             }
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::Using ) {
             const clang::UsingType* using_type = clang_type->getAs<clang::UsingType>();
-            return ClangTypeToASRType(using_type->getUnderlyingType(), xshape_result,
+            return ClangTypeToASRType(using_type->getUnderlyingType(), is_const, xshape_result,
                 array_type, is_third_party_cpp_array);
         } else if( clang_type->getTypeClass() == clang::Type::TypeClass::SubstTemplateTypeParm ||
                    clang_type->getTypeClass() == clang::Type::TypeClass::Typedef ) {
@@ -638,7 +639,7 @@ public:
         }
 
         if( qualifiers.hasConst() ) {
-            type = ASRUtils::TYPE(ASR::make_Const_t(al, l, type));
+            is_const = true;
         }
         return type;
     }
@@ -700,10 +701,12 @@ public:
             throw std::runtime_error(name + std::string(" is already defined."));
         }
 
-        ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType());
+        bool is_const = false;
+        ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType(), is_const);
         ASR::symbol_t *v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
             current_scope, s2c(al, name), nullptr, 0, ASR::intentType::Local, nullptr, nullptr,
-            ASR::storage_typeType::Default, asr_type, nullptr, ASR::abiType::Source,
+            (is_const ? ASR::storage_typeType::Parameter : ASR::storage_typeType::Default),
+            asr_type, nullptr, ASR::abiType::Source,
             ASR::accessType::Public, ASR::presenceType::Required, false));
         current_scope->add_symbol(name, v);
         is_stmt_created = false;
@@ -806,7 +809,8 @@ public:
         bool is_third_party_array_type = false;
         ThirdPartyCPPArrayTypes array_type;
         Vec<ASR::dimension_t> shape_result; shape_result.reserve(al, 1);
-        ASR::ttype_t* type = ClangTypeToASRType(x->getType(), &shape_result,
+        bool is_const = false;
+        ASR::ttype_t* type = ClangTypeToASRType(x->getType(), is_const, &shape_result,
             &array_type, &is_third_party_array_type);
         if( is_third_party_array_type &&
             array_type == ThirdPartyCPPArrayTypes::PyTorchArray ) {
@@ -815,9 +819,8 @@ public:
             }
         }
         ASR::intentType intent_type = ASR::intentType::InOut;
-        if( ASR::is_a<ASR::Const_t>(*type) ) {
+        if( is_const ) {
             intent_type = ASR::intentType::In;
-            type = ASRUtils::type_get_past_const(type);
         }
         if( ASRUtils::is_allocatable(type) ) {
             type = ASRUtils::type_get_past_allocatable(type);
@@ -828,7 +831,7 @@ public:
         }
         tmp = ASR::make_Variable_t(al, Lloc(x), current_scope, s2c(al, name),
             nullptr, 0, intent_type, nullptr, nullptr,
-            ASR::storage_typeType::Default, type, nullptr, ASR::abiType::Source,
+            (is_const ? ASR::storage_typeType::Parameter : ASR::storage_typeType::Default), type, nullptr, ASR::abiType::Source,
             ASR::accessType::Public, ASR::presenceType::Required, false);
         ASR::symbol_t* tmp_sym = ASR::down_cast<ASR::symbol_t>(tmp.get());
         current_scope->add_symbol(name, tmp_sym);
@@ -878,8 +881,9 @@ public:
         clang::Expr* sub_expr = x->getSubExpr();
         TraverseStmt(sub_expr);
         ASR::expr_t* arg = ASRUtils::EXPR(tmp.get());
+        bool is_const = false;
         tmp = ASRUtils::make_Cast_t_value(al, Lloc(x), arg, asr_cast_kind,
-                ClangTypeToASRType(x->getType()));
+                ClangTypeToASRType(x->getType(), is_const));
         is_stmt_created = false;
         return true;
     }
@@ -1692,7 +1696,8 @@ public:
         ASR::Var_t* callee_Var = ASR::down_cast<ASR::Var_t>(callee);
         ASR::symbol_t* callee_sym = callee_Var->m_v;
         const clang::QualType& qual_type = x->getCallReturnType(*Context);
-        ASR::ttype_t* return_type = ClangTypeToASRType(qual_type);
+        bool is_const = false;
+        ASR::ttype_t* return_type = ClangTypeToASRType(qual_type, is_const);
         if( return_type == nullptr ) {
             tmp = ASRUtils::make_SubroutineCall_t_util(al, Lloc(x), callee_sym,
                 callee_sym, call_args.p, call_args.size(), nullptr,
@@ -1722,7 +1727,8 @@ public:
                 args.push_back(al, ASRUtils::EXPR(tmp.get()));
             }
 
-            ASR::ttype_t* return_type = ClangTypeToASRType(x->getReturnType());
+            bool is_const = false;
+            ASR::ttype_t* return_type = ClangTypeToASRType(x->getReturnType(), is_const);
             ASR::symbol_t* return_sym = nullptr;
             ASR::expr_t* return_var = nullptr;
             if (return_type != nullptr) {
@@ -1797,7 +1803,8 @@ public:
         ThirdPartyCPPArrayTypes third_party_array_type;
         bool is_third_party_array_type = false;
         Vec<ASR::dimension_t> shape_result; shape_result.reserve(al, 1);
-        ASR::ttype_t* constructor_type = ClangTypeToASRType(x->getType(), &shape_result,
+        bool is_const = false;
+        ASR::ttype_t* constructor_type = ClangTypeToASRType(x->getType(), is_const, &shape_result,
             &third_party_array_type, &is_third_party_array_type);
         if( is_third_party_array_type && third_party_array_type == ThirdPartyCPPArrayTypes::MDSpanArray ) {
             if( x->getNumArgs() == 0 ) {
@@ -1975,8 +1982,9 @@ public:
             }
             struct_constructor_args.push_back(al, call_arg);
         }
+        bool is_const = false;
         tmp = ASR::make_StructTypeConstructor_t(al, Lloc(x), s, struct_constructor_args.p,
-            struct_constructor_args.size(), ClangTypeToASRType(x->getType()), nullptr);
+            struct_constructor_args.size(), ClangTypeToASRType(x->getType(), is_const), nullptr);
         return true;
     }
 
@@ -2004,7 +2012,7 @@ public:
     void evaluate_compile_time_value_for_Var(clang::APValue* ap_value, ASR::symbol_t* v) {
         switch( ap_value->getKind() ) {
             case clang::APValue::Struct: {
-                ASR::ttype_t* v_type = ASRUtils::type_get_past_const(ASRUtils::symbol_type(v));
+                ASR::ttype_t* v_type = ASRUtils::symbol_type(v);
                 if( !ASR::is_a<ASR::Struct_t>(*v_type) ) {
                     // throw std::runtime_error("Expected ASR::Struct_t type found, " +
                     //     ASRUtils::type_to_str(v_type));
@@ -2045,8 +2053,9 @@ public:
             }
         }
         Vec<ASR::dimension_t> xshape_result; xshape_result.reserve(al, 0);
-        ThirdPartyCPPArrayTypes array_type; bool is_third_party_array_type = false;
-        ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType(), &xshape_result,
+        ThirdPartyCPPArrayTypes array_type;
+        bool is_third_party_array_type = false, is_const = false;
+        ASR::ttype_t *asr_type = ClangTypeToASRType(x->getType(), is_const, &xshape_result,
             &array_type, &is_third_party_array_type);
         if( is_third_party_array_type &&
             array_type == ThirdPartyCPPArrayTypes::PyTorchArray ) {
@@ -2056,7 +2065,8 @@ public:
         }
         ASR::symbol_t *v = ASR::down_cast<ASR::symbol_t>(ASR::make_Variable_t(al, Lloc(x),
             current_scope, s2c(al, name), nullptr, 0, ASR::intentType::Local, nullptr, nullptr,
-            ASR::storage_typeType::Default, asr_type, nullptr, ASR::abiType::Source,
+            (is_const ? ASR::storage_typeType::Parameter : ASR::storage_typeType::Default),
+            asr_type, nullptr, ASR::abiType::Source,
             ASR::accessType::Public, ASR::presenceType::Required, false));
         current_scope->add_symbol(name, v);
         is_stmt_created = false;
@@ -2072,7 +2082,7 @@ public:
             assignment_target = nullptr;
             if( tmp != nullptr && !is_stmt_created ) {
                 ASR::expr_t* init_val = ASRUtils::EXPR(tmp.get());
-                if( ASR::is_a<ASR::Const_t>(*asr_type) ) {
+                if( is_const ) {
                     if( !ASRUtils::is_value_constant(ASRUtils::expr_value(init_val)) &&
                         !ASR::is_a<ASR::StructTypeConstructor_t>(*init_val) ) {
                         throw std::runtime_error("Initialisation expression of "
@@ -2181,8 +2191,7 @@ public:
 
         ASR::Array_t* array_t = ASR::down_cast<ASR::Array_t>(
             ASRUtils::type_get_past_allocatable(
-                ASRUtils::type_get_past_pointer(
-                    ASRUtils::type_get_past_const(array_type))));
+                ASRUtils::type_get_past_pointer(array_type)));
         for( int i = 0; i < array_t->n_dims; i++ ) {
             alloc_dims.push_back(al, array_t->m_dims[i]);
         }
@@ -2346,7 +2355,7 @@ public:
             return nullptr;
         }
 
-        ASR::ttype_t* result_type = ASRUtils::type_get_past_const(ASRUtils::expr_type(lhs));
+        ASR::ttype_t* result_type = ASRUtils::expr_type(lhs);
 
         #define EVALUATE_COMPILE_TIME_VALUE_FOR_BINOP_CASE(Name, Constructor, Ctype) \
             case ASR::ttypeType::Name: { \
@@ -2376,9 +2385,8 @@ public:
         ASR::binopType binop_type, const Location& loc) {
         cast_helper(lhs, rhs, false);
         ASRUtils::make_ArrayBroadcast_t_util(al, loc, lhs, rhs);
-        ASR::ttype_t* result_type = ASRUtils::type_get_past_const(
-            ASRUtils::type_get_past_allocatable(
-                ASRUtils::type_get_past_pointer(ASRUtils::expr_type(lhs))));
+        ASR::ttype_t* result_type = ASRUtils::type_get_past_allocatable(
+                ASRUtils::type_get_past_pointer(ASRUtils::expr_type(lhs)));
         if( ASRUtils::is_integer(*ASRUtils::expr_type(lhs)) &&
             ASRUtils::is_integer(*ASRUtils::expr_type(rhs)) ) {
             tmp = ASR::make_IntegerBinOp_t(al, loc, lhs,
