@@ -31,6 +31,7 @@ src/lc/parser/parser.tab.cc
 src/lc/parser/parser.tab.hh
 src/libasr/asr.h
 src/libasr/wasm_visitor.h
+src/libasr/pass/intrinsic_function_registry_util.h
 src/libasr/config.h
 fa
 fa2
