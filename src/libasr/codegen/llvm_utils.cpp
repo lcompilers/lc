@@ -507,6 +507,11 @@ namespace LCompilers {
                 el_type = character_type;
                 break;
             }
+            case ASR::ttypeType::Const: {
+                ASR::ttype_t* t2 = ASR::down_cast<ASR::Const_t>(m_type_)->m_type;
+                el_type = get_el_type(t2, module);
+                break;
+            }
             default:
                 LCOMPILERS_ASSERT(false);
                 break;

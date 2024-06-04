@@ -41,3 +41,7 @@ asr = true
 [[test]]
 filename = "../integration_tests/array_04.cpp"
 asr = true
+
+[[test]]
+filename = "../integration_tests/array_28.cpp"
+asr = true
